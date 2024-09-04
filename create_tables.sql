@@ -48,3 +48,28 @@ CREATE TABLE IF NOT EXISTS filesInMessage (
     inFileSystem VARCHAR(255),
     rawFile BYTEA.
 );
+
+-- table to store actives and prices
+CREATE TABLE IF NOT EXISTS active (
+    activeId INT GENERATED ALWAYS IS IDENTITY,
+    activeName VARCHAR(255), 
+    activeTicker VARCHAR(16), -- TODO: check size
+    activePrice INT,
+    activeDescription TEXT
+    -- something else?
+)
+
+CREATE TABLE IF NOT EXISTS usersActives (
+    lineId INT GENERATED ALWAYS IS IDENTITY,
+    CONSTRAINT user FOREIGN KEY(user) REFERENCES user(userId),
+    CONSTRAINT active FOREIGN KEY(active) REFERENCES active(activeId),
+    ammount INT,
+    avgBoughtPrice FLOAT(5) -- TODO: check size
+)
+
+CREATE TABLE IF NOT EXISTS transaction (
+    transactionId INT GENERATED ALWAYS AS IDENTITY,
+    CONSTRAINT usersActiveId FOREIGN KEY(usersActives) REFERENCES usersActives(lineId),
+    transactionTime TIMESTAMPTZ DEFAULT Now(),
+    transactionPrice FLOAT(10) -- TODO: check size
+)

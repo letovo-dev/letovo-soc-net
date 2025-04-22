@@ -27,6 +27,8 @@ namespace social {
 
     pqxx::result get_post(std::string post_id, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
+    pqxx::result get_saved_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+
     void add_like(int like, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
     void add_comment(std::string comment, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);

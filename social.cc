@@ -12,7 +12,7 @@ namespace social {
     pqxx::result get_news(std::string start, int size, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username, start, std::to_string(size)};
-        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 WHERE p.parent_id is null ORDER BY p.post_id DESC offset ($2) LIMIT ($3);", params);
+        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 WHERE p.parent_id is null ORDER BY p.post_id DESC offset ($2) LIMIT ($3);", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -67,7 +67,7 @@ namespace social {
     pqxx::result get_post(std::string post_id, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {post_id};
-        pqxx::result result = con->execute_params("SELECT * FROM \"posts\" WHERE \"post_id\"=($1);", params);
+        pqxx::result result = con->execute_params("SELECT p.*, case when s.username is not null then true else false end as saved  FROM \"posts\" p left join \"user_saved\" s on p.post_id = s.post_id and s.username = 'scv-7' WHERE p.post_id=($1);", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }

@@ -56,6 +56,21 @@ namespace social {
         con->execute_params("INSERT INTO \"comments\" (\"comment\", \"post_id\", \"username\") VALUES ($1, $2, $3);", params, true);
         pool_ptr->returnConnection(std::move(con));
     }
+
+    pqxx::result get_all_titles(std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+        pqxx::result result = con->execute("SELECT post_id, title FROM \"posts\";");
+        pool_ptr->returnConnection(std::move(con));
+        return result;
+    }
+
+    pqxx::result get_post(std::string post_id, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+        std::vector<std::string> params = {post_id};
+        pqxx::result result = con->execute_params("SELECT * FROM \"posts\" WHERE \"post_id\"=($1);", params);
+        pool_ptr->returnConnection(std::move(con));
+        return result;
+    }
 }
 
 namespace social::server {
@@ -135,6 +150,73 @@ namespace social::server {
             std::string post_id = url::get_last_url_arg(req->header().path());
             bool pics = false; //req->header().get_field("pics") == "true";
             pqxx::result result = social::get_post_media(post_id, pics, pool_ptr);
+            return req->create_response()
+                .set_body(cp::serialize(result))
+                .append_header("Content-Type", "application/json; charset=utf-8")
+                .done();
+        });
+    }
+
+    void get_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_get(R"(/social/new/:post_id(.*))", [pool_ptr, logger_ptr](auto req, auto) {
+            std::string token;
+            try {
+                token = req -> header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            std::string username = auth::get_username(token, pool_ptr);
+            if(username == "") {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            logger_ptr->info([username] { return fmt::format("user {} get post request", username); });
+            std::string post_id = url::get_last_url_arg(req->header().path());
+            logger_ptr->info([post_id] { return fmt::format("get post request for {}", post_id); });
+            pqxx::result result = social::get_post(post_id, pool_ptr);
+            return req->create_response()
+                .set_body(cp::serialize(result))
+                .append_header("Content-Type", "application/json; charset=utf-8")
+                .done();
+        });
+    }
+
+    void get_all_titles(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_get("/social/titles", [pool_ptr, logger_ptr](auto req, auto) {
+            std::string token;
+            try {
+                token = req -> header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            std::string username = auth::get_username(token, pool_ptr);
+            if(username == "") {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            pqxx::result result = social::get_all_titles(pool_ptr);
+            return req->create_response()
+                .set_body(cp::serialize(result))
+                .append_header("Content-Type", "application/json; charset=utf-8")
+                .done();
+        });
+    }
+
+    void search_by_title(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_get(R"(/social/search:search(.*))", [pool_ptr, logger_ptr](auto req, auto) {
+            std::string token;
+            try {
+                token = req -> header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            std::string username = auth::get_username(token, pool_ptr);
+            if(username == "") {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            const auto qp = restinio::parse_query( req->header().query() );
+            if(!qp.has("title")) {
+                return req->create_response(restinio::status_bad_request()).done();
+            }
+            pqxx::result result = social::get_post("81", pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize(result))
                 .append_header("Content-Type", "application/json; charset=utf-8")

@@ -12,7 +12,7 @@ namespace social {
     pqxx::result get_news(std::string start, int size, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username, start, std::to_string(size)};
-        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 WHERE p.parent_id is null ORDER BY p.date DESC offset ($2) LIMIT ($3);", params);
+        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null ORDER BY p.date DESC offset ($2) LIMIT ($3);", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -22,7 +22,7 @@ namespace social {
         // std::vector<std::string> params = {username, post_id, start, std::to_string(size)};
         std::vector<std::string> params = {username, start, std::to_string(size), post_id};
         // pqxx::result result = con->execute_params("SELECT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id where p.parent_id is not null and p.parent_id = ($2) ORDER BY p.post_id DESC offset ($3) LIMIT ($4);", params);
-        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 WHERE p.parent_id = ($4) ORDER BY p.date DESC offset ($2) LIMIT ($3);", params);
+        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id = ($4) ORDER BY p.date DESC offset ($2) LIMIT ($3);", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -91,7 +91,7 @@ namespace social {
     pqxx::result get_saved_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username};
-        pqxx::result result = con->execute_params("SELECT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = ($1) left join \"user_saved\" s on p.post_id = s.post_id and s.username = ($1) WHERE s.username=($1);", params);
+        pqxx::result result = con->execute_params("SELECT p.*, u.avatar_pic, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = ($1) left join \"user_saved\" s on p.post_id = s.post_id and s.username = ($1) left join \"user\" u on p.author = u.username WHERE s.username=($1);", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -113,7 +113,7 @@ namespace social {
     pqxx::result get_post(std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username, post_id};
-        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = ($1) left join \"user_saved\" s on p.post_id = s.post_id and s.username = ($1) WHERE p.post_id = ($2)", params);
+        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = ($1) left join \"user_saved\" s on p.post_id = s.post_id and s.username = ($1) left join \"user\" u on p.author = u.username WHERE p.post_id = ($2)", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }

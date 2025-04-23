@@ -12,7 +12,7 @@ namespace social {
     pqxx::result get_news(std::string start, int size, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username, start, std::to_string(size)};
-        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 WHERE p.parent_id is null ORDER BY p.post_id DESC offset ($2) LIMIT ($3);", params);
+        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 WHERE p.parent_id is null ORDER BY p.date DESC offset ($2) LIMIT ($3);", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -20,9 +20,9 @@ namespace social {
     pqxx::result get_comments(std::string post_id, std::string start, int size, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         // std::vector<std::string> params = {username, post_id, start, std::to_string(size)};
-        std::vector<std::string> params = {post_id, start, std::to_string(size)};
+        std::vector<std::string> params = {username, start, std::to_string(size), post_id};
         // pqxx::result result = con->execute_params("SELECT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id where p.parent_id is not null and p.parent_id = ($2) ORDER BY p.post_id DESC offset ($3) LIMIT ($4);", params);
-        pqxx::result result = con->execute_params("SELECT * from \"comments\" where \"post_id\" = ($1) ORDER BY \"post_id\" DESC offset ($2) LIMIT ($3);", params);
+        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 WHERE p.parent_id = ($4) ORDER BY p.date DESC offset ($2) LIMIT ($3);", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -41,19 +41,43 @@ namespace social {
         return result;
     }
 
+    // FIXME: bug select always returns empty result
     void add_like(int like, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {std::to_string(like), post_id, username};
+        auto check = con->execute_params("SELECT * FROM \"user_likes\" ul WHERE ul.post_id=($2) AND ul.username=($3) and ul.value=($1);", params);
+        std::cout << "check size: " << check.size() << " for " << username << ' ' << post_id << std::endl;
+        if(check.size() > 0) {
+            pool_ptr->returnConnection(std::move(con));
+            return;
+        }
         con->execute_params("INSERT INTO \"user_likes\" (\"value\", \"post_id\", \"username\") VALUES ($1, $2, $3) ON CONFLICT (post_id, username) DO NOTHING;", params, true);
-        params = {std::to_string(like), post_id};
-        con->execute_params("UPDATE \"posts\" SET likes = likes + ($1) WHERE post_id=($2);", params, true);
+        params = {post_id};
+        if(like == 1) {
+            con->execute_params("UPDATE \"posts\" SET likes = likes + 1 WHERE post_id=($1);", params, true);
+        } else if(like == -1) {
+            con->execute_params("UPDATE \"posts\" SET dislikes = dislikes + 1 WHERE post_id=($1);", params, true);
+        }
+        pool_ptr->returnConnection(std::move(con));
+    }
+
+    void delete_like(int like, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+        std::vector<std::string> params = {post_id, username};
+        con->execute_params("DELETE FROM \"user_likes\" WHERE post_id=($1) AND username=($2);", params, true);
+        params = {post_id};
+        if(like == 1) {
+            con->execute_params("UPDATE \"posts\" SET likes = likes - 1 WHERE post_id=($1);", params, true);
+        } else if(like == -1) {
+            con->execute_params("UPDATE \"posts\" SET dislikes = dislikes - 1 WHERE post_id=($1);", params, true);
+        }
         pool_ptr->returnConnection(std::move(con));
     }
 
     void add_comment(std::string comment, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {comment, post_id, username};
-        con->execute_params("INSERT INTO \"comments\" (\"comment\", \"post_id\", \"username\") VALUES ($1, $2, $3);", params, true);
+        con->execute_params("INSERT INTO \"posts\" (\"text\", \"parent_id\", \"author\") VALUES ($1, $2, $3);", params, true);
         pool_ptr->returnConnection(std::move(con));
     }
 
@@ -64,10 +88,32 @@ namespace social {
         return result;
     }
 
-    pqxx::result get_post(std::string post_id, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    pqxx::result get_saved_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
-        std::vector<std::string> params = {post_id};
-        pqxx::result result = con->execute_params("SELECT p.*, case when s.username is not null then true else false end as saved  FROM \"posts\" p left join \"user_saved\" s on p.post_id = s.post_id and s.username = 'scv-7' WHERE p.post_id=($1);", params);
+        std::vector<std::string> params = {username};
+        pqxx::result result = con->execute_params("SELECT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = ($1) left join \"user_saved\" s on p.post_id = s.post_id and s.username = ($1) WHERE s.username=($1);", params);
+        pool_ptr->returnConnection(std::move(con));
+        return result;
+    }
+
+    void save_post(std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+        std::vector<std::string> params = {post_id, username};
+        con->execute_params("INSERT INTO \"user_saved\" (\"post_id\", \"username\") VALUES ($1, $2);", params, true);
+        pool_ptr->returnConnection(std::move(con));
+    }
+
+    void delete_saved_post(std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+        std::vector<std::string> params = {post_id, username};
+        con->execute_params("DELETE FROM \"user_saved\" WHERE post_id=($1) AND username=($2);", params, true);
+        pool_ptr->returnConnection(std::move(con));
+    }
+
+    pqxx::result get_post(std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+        std::vector<std::string> params = {username, post_id};
+        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = ($1) left join \"user_saved\" s on p.post_id = s.post_id and s.username = ($1) WHERE p.post_id = ($2)", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -172,7 +218,7 @@ namespace social::server {
             logger_ptr->info([username] { return fmt::format("user {} get post request", username); });
             std::string post_id = url::get_last_url_arg(req->header().path());
             logger_ptr->info([post_id] { return fmt::format("get post request for {}", post_id); });
-            pqxx::result result = social::get_post(post_id, pool_ptr);
+            pqxx::result result = social::get_post(post_id, username, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize(result))
                 .append_header("Content-Type", "application/json; charset=utf-8")
@@ -200,6 +246,68 @@ namespace social::server {
         });
     }
 
+    void get_saved_posts(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_get("/social/saved", [pool_ptr, logger_ptr](auto req, auto) {
+            std::string token;
+            try {
+                token = req -> header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            std::string username = auth::get_username(token, pool_ptr);
+            if(username == "") {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            pqxx::result result = social::get_saved_posts(username, pool_ptr);
+            return req->create_response()
+                .set_body(cp::serialize(result))
+                .append_header("Content-Type", "application/json; charset=utf-8")
+                .done();
+        });
+    }
+    void save_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_post("/social/save", [pool_ptr, logger_ptr](auto req, auto) {
+            rapidjson::Document new_body;
+            new_body.Parse(req->body().c_str());
+            std::string token;
+            try {
+                token = req -> header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            std::string username = auth::get_username(token, pool_ptr);
+            if(username == "") {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            if(!new_body.HasMember("post_id")) {
+                return req->create_response(restinio::status_bad_request()).done();
+            }
+            social::save_post(new_body["post_id"].GetString(), username, pool_ptr);
+            return req->create_response().done();
+        });
+    }
+    void delete_saved_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_delete("/social/save", [pool_ptr, logger_ptr](auto req, auto) {
+            rapidjson::Document new_body;
+            new_body.Parse(req->body().c_str());
+            std::string token;
+            try {
+                token = req -> header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            std::string username = auth::get_username(token, pool_ptr);
+            if(username == "") {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            if(!new_body.HasMember("post_id")) {
+                return req->create_response(restinio::status_bad_request()).done();
+            }
+            social::delete_saved_post(new_body["post_id"].GetString(), username, pool_ptr);
+            return req->create_response().done();
+        });
+    }
+
     void search_by_title(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/social/search:search(.*))", [pool_ptr, logger_ptr](auto req, auto) {
             std::string token;
@@ -216,7 +324,7 @@ namespace social::server {
             if(!qp.has("title")) {
                 return req->create_response(restinio::status_bad_request()).done();
             }
-            pqxx::result result = social::get_post("81", pool_ptr);
+            pqxx::result result = social::get_post("81", username, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize(result))
                 .append_header("Content-Type", "application/json; charset=utf-8")
@@ -242,7 +350,87 @@ namespace social::server {
                 return req->create_response(restinio::status_bad_request()).done();
             }
             try {
+                social::delete_like(-1, new_body["post_id"].GetString(), username, pool_ptr);
                 social::add_like(1, new_body["post_id"].GetString(), username, pool_ptr);
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_internal_server_error()).done();
+            }
+            return req->create_response().done();
+        });
+    }
+
+    void add_dislike(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_post("/social/dislike", [pool_ptr, logger_ptr](auto req, auto) {
+            rapidjson::Document new_body;
+            new_body.Parse(req->body().c_str());
+            std::string token;
+            try {
+                token = req -> header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            std::string username = auth::get_username(token, pool_ptr);
+            if(username == "") {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            if(!new_body.HasMember("post_id")) {
+                return req->create_response(restinio::status_bad_request()).done();
+            }
+            try {
+                social::delete_like(1, new_body["post_id"].GetString(), username, pool_ptr);
+                social::add_like(-1, new_body["post_id"].GetString(), username, pool_ptr);
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_internal_server_error()).done();
+            }
+            return req->create_response().done();
+        });
+    }
+
+    void delete_like(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_delete("/social/like", [pool_ptr, logger_ptr](auto req, auto) {
+            rapidjson::Document new_body;
+            new_body.Parse(req->body().c_str());
+            std::string token;
+            try {
+                token = req -> header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            std::string username = auth::get_username(token, pool_ptr);
+            if(username == "") {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            if(!new_body.HasMember("post_id")) {
+                return req->create_response(restinio::status_bad_request()).done();
+            }
+            try {
+                social::delete_like(1, new_body["post_id"].GetString(), username, pool_ptr);
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_internal_server_error()).done();
+            }
+            return req->create_response().done();
+        });
+    }
+
+    void delete_dislike(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_delete("/social/dislike", [pool_ptr, logger_ptr](auto req, auto) {
+            rapidjson::Document new_body;
+            new_body.Parse(req->body().c_str());
+            std::string token;
+            try {
+                token = req -> header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            std::string username = auth::get_username(token, pool_ptr);
+            if(username == "") {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            if(!new_body.HasMember("post_id")) {
+                return req->create_response(restinio::status_bad_request()).done();
+            }
+            try {
+                social::delete_like(-1, new_body["post_id"].GetString(), username, pool_ptr);
             } catch (const std::exception& e) {
                 return req->create_response(restinio::status_internal_server_error()).done();
             }

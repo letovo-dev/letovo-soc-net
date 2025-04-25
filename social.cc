@@ -74,11 +74,12 @@ namespace social {
         pool_ptr->returnConnection(std::move(con));
     }
 
-    void add_comment(std::string comment, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    int add_comment(std::string comment, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {comment, post_id, username};
-        con->execute_params("INSERT INTO \"posts\" (\"text\", \"parent_id\", \"author\") VALUES ($1, $2, $3);", params, true);
+        pqxx::result result = con->execute_params("INSERT INTO \"posts\" (\"text\", \"parent_id\", \"author\") VALUES ($1, $2, $3) returning \"post_id\";", params, true);
         pool_ptr->returnConnection(std::move(con));
+        return result[0]["post_id"].as<int>();
     }
 
     pqxx::result get_all_titles(std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
@@ -456,12 +457,16 @@ namespace social::server {
                 return req->create_response(restinio::status_bad_request()).done();
             }
             try {
-                social::add_comment(new_body["comment"].GetString(), new_body["post_id"].GetString(), username, pool_ptr);
+                int post_id = social::add_comment(new_body["comment"].GetString(), new_body["post_id"].GetString(), username, pool_ptr);
+                pqxx::result result = social::get_post(std::to_string(post_id), username, pool_ptr);
+                return req->create_response()
+                    .set_body(cp::serialize(result))
+                    .append_header("Content-Type", "application/json; charset=utf-8")
+                    .done();
             } catch(const std::exception& e) {
                 logger_ptr->error([e] { return fmt::format("Error: {}", e.what()); });
                 return req->create_response(restinio::status_internal_server_error()).done();
             }
-            return req->create_response().done();
         });
     }
 }

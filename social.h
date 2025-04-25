@@ -34,7 +34,7 @@ namespace social {
 
     void delete_like(int like, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
-    void add_comment(std::string comment, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+    int add_comment(std::string comment, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
     void save_post(std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 

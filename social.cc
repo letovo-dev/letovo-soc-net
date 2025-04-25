@@ -69,7 +69,7 @@ namespace social {
         if(like == 1) {
             con->execute_params("UPDATE \"posts\" SET likes = likes - 1 WHERE post_id=($1);", params, true);
         } else if(like == -1) {
-            con->execute_params("UPDATE \"posts\" SET dislikes = dislikes - 1 WHERE post_id=($1);", params, true);
+            con->execute_params("UPDATE \"posts\" SET dislikes = dislikes + 1 WHERE post_id=($1);", params, true);
         }
         pool_ptr->returnConnection(std::move(con));
     }

@@ -12,7 +12,7 @@ namespace social {
     pqxx::result get_news(std::string start, int size, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username, start, std::to_string(size)};
-        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null ORDER BY p.date DESC offset ($2) LIMIT ($3);", params);
+        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null and p.post_path is null ORDER BY p.date DESC offset ($2) LIMIT ($3);", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -22,7 +22,7 @@ namespace social {
         // std::vector<std::string> params = {username, post_id, start, std::to_string(size)};
         std::vector<std::string> params = {username, start, std::to_string(size), post_id};
         // pqxx::result result = con->execute_params("SELECT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id where p.parent_id is not null and p.parent_id = ($2) ORDER BY p.post_id DESC offset ($3) LIMIT ($4);", params);
-        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id = ($4) ORDER BY p.date DESC offset ($2) LIMIT ($3);", params);
+        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id = ($4) and p.post_path is null ORDER BY p.date DESC offset ($2) LIMIT ($3);", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -31,7 +31,7 @@ namespace social {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {post_id};
         pqxx::result result;
-        result = con->execute_params("SELECT * FROM \"post_media\" WHERE \"post_media\".post_id=($1);", params);
+        result = con->execute_params("SELECT * FROM \"post_media\" WHERE \"post_media\".post_id=($1) and \"post_media\".is_secret=false;", params);
         // if(pics) {
         //     result = con->execute_params("SELECT * FROM \"post_media\" WHERE \"post_media\".post_id=($1) AND \"post_media\".is_pic=true;", params);
         // } else {
@@ -84,7 +84,15 @@ namespace social {
 
     pqxx::result get_all_titles(std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
-        pqxx::result result = con->execute("SELECT post_id, title FROM \"posts\";");
+        pqxx::result result = con->execute("SELECT post_id, title FROM \"posts\" where \"posts\".post_path is null and \"posts\".parent_id is null;");
+        pool_ptr->returnConnection(std::move(con));
+        return result;
+    }
+
+    pqxx::result get_all_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+        std::vector<std::string> params = {username};
+        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null and p.post_path is not null ORDER BY p.title;", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -227,6 +235,26 @@ namespace social::server {
         });
     }
 
+    void get_all_posts(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_get("/social/posts", [pool_ptr, logger_ptr](auto req, auto) {
+            std::string token;
+            try {
+                token = req -> header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            std::string username = auth::get_username(token, pool_ptr);
+            if(username == "") {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            pqxx::result result = social::get_all_posts(username, pool_ptr);
+            return req->create_response()
+                .set_body(cp::serialize(result))
+                .append_header("Content-Type", "application/json; charset=utf-8")
+                .done();
+        });
+    }
+
     void get_all_titles(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get("/social/titles", [pool_ptr, logger_ptr](auto req, auto) {
             std::string token;
@@ -325,7 +353,7 @@ namespace social::server {
             if(!qp.has("title")) {
                 return req->create_response(restinio::status_bad_request()).done();
             }
-            pqxx::result result = social::get_post("81", username, pool_ptr);
+            pqxx::result result = social::get_post("111", username, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize(result))
                 .append_header("Content-Type", "application/json; charset=utf-8")

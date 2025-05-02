@@ -19,6 +19,8 @@ namespace social {
 
     pqxx::result get_news(std::string start, int size, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
+    pqxx::result get_all_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+
     pqxx::result get_comments(std::string post_id, std::string start, int size, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
         
     pqxx::result get_post_media(std::string post_id, bool pics, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
@@ -27,7 +29,6 @@ namespace social {
 
     pqxx::result get_post(std::string post_id, std::string usenrame, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
-    pqxx::result get_saved_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
     pqxx::result get_saved_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
     void add_like(int like, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
@@ -54,6 +55,8 @@ namespace social::server {
 
     void get_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr);
 
+    void get_all_posts(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr);
+    
     void get_all_titles(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr);
 
     void get_saved_posts(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr);

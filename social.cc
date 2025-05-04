@@ -126,6 +126,36 @@ namespace social {
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
+
+
+    pqxx::result get_post_categories(std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+
+        pqxx::result result = con->execute("select distinct p.category, p.category_name from \"posts\" p WHERE p.post_path is not null;");
+
+        pool_ptr->returnConnection(std::move(con));
+
+        if (result.empty()) {
+            return {};
+        }
+        return result;
+    }
+
+    pqxx::result get_post_by_category(std::string category, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+
+        std::vector<std::string> params = {category};
+
+        pqxx::result result = con->execute_params("select * from \"posts\" p where p.category = ($1) AND p.post_path is not null;", params);
+
+        pool_ptr->returnConnection(std::move(con));
+
+        if (result.empty()) {
+            return {};
+        }
+        return result;
+    }
+
 }
 
 namespace social::server {
@@ -495,6 +525,40 @@ namespace social::server {
                 logger_ptr->error([e] { return fmt::format("Error: {}", e.what()); });
                 return req->create_response(restinio::status_internal_server_error()).done();
             }
+        });
+    }
+
+
+    void get_post_categories(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_get("/social/categories", [pool_ptr, logger_ptr](auto req, auto) {
+            pqxx::result result = social::get_post_categories(pool_ptr);
+            if (result.empty()) {
+                return req->create_response(restinio::status_bad_gateway()).done();
+            }
+            return req->create_response().set_body(cp::serialize(result))
+                .append_header("Content-Type", "application/json; charset=utf-8")
+                .done();
+        });
+    }
+
+    void get_post_by_category(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_get(R"(/social/bycat/:category([0-9\-]+))", [pool_ptr, logger_ptr](auto req, auto params) {
+            auto qrl = req->header().path();
+
+            std::string category = url::get_last_url_arg(qrl);
+
+            if (category == "category" || category.empty()) {
+                return req->create_response(restinio::status_bad_request()).done();
+            }
+
+            pqxx::result result = social::get_post_by_category(category, pool_ptr);
+
+            if (result.empty()) {
+                return req->create_response(restinio::status_bad_gateway()).done();
+            }
+            return req->create_response().set_body(cp::serialize(result))
+                .append_header("Content-Type", "application/json; charset=utf-8")
+                .done();
         });
     }
 }

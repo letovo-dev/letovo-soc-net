@@ -40,6 +40,10 @@ namespace social {
     void save_post(std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
     void delete_saved_post(std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+
+    pqxx::result get_post_categories(std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+
+    pqxx::result get_post_by_category(std::string category, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 }
 
 namespace social::server {
@@ -76,4 +80,8 @@ namespace social::server {
     void save_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr);
 
     void delete_saved_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr);
+
+    void get_post_categories(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr);
+
+    void get_post_by_category(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr);
 }

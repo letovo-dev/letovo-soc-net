@@ -74,9 +74,30 @@ namespace social {
         pool_ptr->returnConnection(std::move(con));
     }
 
+
+    std::string escape_newlines(const std::string& input) {
+        std::string output;
+        output.reserve(input.size());
+
+        for (size_t i = 0; i < input.size(); ++i) {
+            if (input[i] == '\r') {
+                if (i + 1 < input.size() && input[i + 1] == '\n') {
+                    ++i;
+                }
+                output += "\\n";
+            } else if (input[i] == '\n') {
+                output += "\\n";
+            } else {
+                output += input[i];
+            }
+        }
+
+        return output;
+    }
+
     int add_comment(std::string comment, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
-        std::vector<std::string> params = {comment, post_id, username};
+        std::vector<std::string> params = {escape_newlines(comment), post_id, username};
         pqxx::result result = con->execute_params("INSERT INTO \"posts\" (\"text\", \"parent_id\", \"author\") VALUES ($1, $2, $3) returning \"post_id\";", params, true);
         pool_ptr->returnConnection(std::move(con));
         return result[0]["post_id"].as<int>();

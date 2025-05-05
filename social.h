@@ -37,6 +37,8 @@ namespace social {
 
     int add_comment(std::string comment, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
+    std::string escape_newlines(const std::string& input);
+
     void save_post(std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
     void delete_saved_post(std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);

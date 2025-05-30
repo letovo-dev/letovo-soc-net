@@ -45,12 +45,19 @@ namespace social {
     void add_like(int like, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {std::to_string(like), post_id, username};
-        auto check = con->execute_params("SELECT * FROM \"user_likes\" ul WHERE ul.post_id=($2) AND ul.username=($3) and ul.value=($1);", params);
+        auto check = con->execute_params("SELECT * FROM \"user_likes\" ul WHERE ul.post_id=($2) AND ul.username=($3) and ul.value!=($1);", params);
         std::cout << "check size: " << check.size() << " for " << username << ' ' << post_id << std::endl;
+        params = {post_id};
         if(check.size() > 0) {
-            pool_ptr->returnConnection(std::move(con));
-            return;
+            if(like == 1) {
+                con->execute_params("UPDATE \"posts\" SET dislikes = dislikes - 1 WHERE post_id=($2);", params, true);
+            } else if(like == -1) {
+                con->execute_params("UPDATE \"posts\" SET likes = likes - 1 WHERE post_id=($2);", params, true);
+            }
         }
+        params = {post_id, username};
+        con->execute_params("DELETE FROM \"user_likes\" WHERE post_id=($1) AND username=($2);", params, true);
+        params = {std::to_string(like), post_id, username};
         con->execute_params("INSERT INTO \"user_likes\" (\"value\", \"post_id\", \"username\") VALUES ($1, $2, $3) ON CONFLICT (post_id, username) DO NOTHING;", params, true);
         params = {post_id};
         if(like == 1) {
@@ -69,7 +76,7 @@ namespace social {
         if(like == 1) {
             con->execute_params("UPDATE \"posts\" SET likes = likes - 1 WHERE post_id=($1);", params, true);
         } else if(like == -1) {
-            con->execute_params("UPDATE \"posts\" SET dislikes = dislikes + 1 WHERE post_id=($1);", params, true);
+            con->execute_params("UPDATE \"posts\" SET dislikes = dislikes - 1 WHERE post_id=($1);", params, true);
         }
         pool_ptr->returnConnection(std::move(con));
     }
@@ -430,7 +437,6 @@ namespace social::server {
                 return req->create_response(restinio::status_bad_request()).done();
             }
             try {
-                social::delete_like(-1, new_body["post_id"].GetString(), username, pool_ptr);
                 social::add_like(1, new_body["post_id"].GetString(), username, pool_ptr);
             } catch (const std::exception& e) {
                 return req->create_response(restinio::status_internal_server_error()).done();

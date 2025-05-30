@@ -137,6 +137,8 @@ namespace social {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {post_id, username};
         con->execute_params("INSERT INTO \"user_saved\" (\"post_id\", \"username\") VALUES ($1, $2);", params, true);
+        params = {post_id};
+        con->execute_params("UPDATE \"posts\" SET saved_count = saved_count + 1 WHERE post_id=($1);", params, true);
         pool_ptr->returnConnection(std::move(con));
     }
 
@@ -144,6 +146,8 @@ namespace social {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {post_id, username};
         con->execute_params("DELETE FROM \"user_saved\" WHERE post_id=($1) AND username=($2);", params, true);
+        params = {post_id};
+        con->execute_params("UPDATE \"posts\" SET saved_count = saved_count - 1 WHERE post_id=($1);", params, true);
         pool_ptr->returnConnection(std::move(con));
     }
 

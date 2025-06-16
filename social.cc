@@ -46,7 +46,6 @@ namespace social {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {std::to_string(like), post_id, username};
         auto check = con->execute_params("SELECT * FROM \"user_likes\" ul WHERE ul.post_id=($2) AND ul.username=($3) and ul.value!=($1);", params);
-        std::cout << "check size: " << check.size() << " for " << username << ' ' << post_id << std::endl;
         params = {post_id};
         if(check.size() > 0) {
             if(like == 1) {

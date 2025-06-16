@@ -78,6 +78,37 @@ namespace page {
         con->execute_params("DELETE FROM \"posts\" WHERE \"post_id\"=($1);", params, true);
         pool_ptr->returnConnection(std::move(con));
     }
+    void update_post(int post_id, bool is_secret, int likes, int dislikes, int saved, std::string title, std::string author, std::string text, std::string category, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+        std::vector<std::string> params = {std::to_string(is_secret), std::to_string(likes), std::to_string(dislikes), std::to_string(saved), title, author, text, category, std::to_string(post_id)};
+
+        con->execute_params("UPDATE \"posts\" SET \"is_secret\"=($1), \"likes\"=($2), \"dislikes\"=($3), \"saved_count\"=($4), \"title\"=($5), \"author\"=($6), \"text\"=($7), \"category_name\"=($8) WHERE \"post_id\"=($9);", params, true);
+        con->execute("select normalize_post_categories();", true);
+        pool_ptr->returnConnection(std::move(con));
+    }
+
+    void add_media(int post_id, std::vector<std::string> &media_paths, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+        std::vector<std::string> params(2);
+        for (const auto& media_path : media_paths) {
+            params[0] = std::to_string(post_id);
+            params[1] = media_path;
+            // could commit after cycle, but idk how
+            con->execute_params("INSERT INTO \"post_media\" (\"post_id\", \"media\") VALUES ($1, $2);", params, true);
+        }
+        pool_ptr->returnConnection(std::move(con));
+    }
+
+    void med_to_vec(const rapidjson::Document& new_body, std::vector<std::string>& out_media) {
+        if (new_body.HasMember("media") && new_body["media"].IsArray()) {
+            const rapidjson::Value& mediaArray = new_body["media"];
+            for (auto& v : mediaArray.GetArray()) {
+                if (v.IsString()) {
+                    out_media.emplace_back(v.GetString());
+                } 
+            }
+        }
+    }
 }
 
 
@@ -148,16 +179,16 @@ namespace page::server {
                 logger_ptr->info( []{return "token is empty";});
                 return req->create_response(restinio::status_unauthorized()).done();
             }
-            if(!auth::is_admin(token, pool_ptr)) {
-                logger_ptr->info( []{return "not admin";});
-                return req->create_response(restinio::status_unauthorized()).done();
-            }
             
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
             int post_id;
 
             if(new_body.HasMember("post_path")) {
+                if(!auth::is_admin(token, pool_ptr)) {
+                    logger_ptr->info( []{return "not admin";});
+                    return req->create_response(restinio::status_unauthorized()).done();
+                }
                 logger_ptr->info( []{return "add new wiki page";});
                 post_id = page::add_page_by_page(
                     new_body["post_path"].GetString(),
@@ -172,16 +203,27 @@ namespace page::server {
                     logger_ptr->info( []{return "bad author";});
                     return req->create_response(restinio::status_non_authoritative_information()).done();
                 }
+                if(!new_body.HasMember("title") || !new_body.HasMember("text")) {
+                    logger_ptr->info( []{return "bad request";});
+                    return req->create_response(restinio::status_bad_request()).done();
+                }
+
                 post_id = page::add_page_by_content(
                     new_body.HasMember("is_secret") ? new_body["is_secret"].GetBool() : false,
                     new_body.HasMember("likes") ? new_body["likes"].GetInt() : 0,
                     new_body.HasMember("dislikes") ? new_body["dislikes"].GetInt() : 0,
                     new_body.HasMember("saved") ? new_body["saved"].GetInt() : 0,
-                    new_body.HasMember("title") ? new_body["title"].GetString() : "",
+                    new_body["title"].GetString(),
                     new_body.HasMember("author") ? new_body["author"].GetString() : auth::get_username(token, pool_ptr),
-                    new_body.HasMember("text") ? new_body["text"].GetString() : "",
+                    new_body["text"].GetString(),
                     pool_ptr, logger_ptr
                 );
+
+                std::vector<std::string> media_paths;
+                page::med_to_vec(new_body, media_paths);
+                if (!media_paths.empty()) {
+                    page::add_media(post_id, media_paths, pool_ptr, logger_ptr);
+                }
             }
 
             return req->create_response(restinio::status_ok())
@@ -364,5 +406,55 @@ namespace page::server {
                     .done();
             } else return req->create_response(restinio::status_non_authoritative_information()).done();
         });
-    }    
+    }   
+    
+    void update_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_put("/post/update", [pool_ptr, logger_ptr](auto req, auto) {
+            std::string token;
+            try {
+                token = req -> header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            if (token.empty()) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            if (!auth::is_admin(token, pool_ptr)) {
+                logger_ptr->info([]{return "not admin";});
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            rapidjson::Document new_body;
+            new_body.Parse(req->body().c_str());
+
+            auto old_post = page::get_page_content(new_body["post_id"].GetInt(), pool_ptr);
+            logger_ptr->info( [post_id = new_body["post_id"].GetInt()]{return fmt::format("update post with id {}", post_id);});
+            try {
+                page::update_post(
+                    new_body.HasMember("post_id") ? new_body["post_id"].GetInt() : old_post[0]["post_id"].as<int>(),
+                    new_body.HasMember("is_secret") ? new_body["is_secret"].GetBool() : old_post[0]["is_secret"].as<bool>(),
+                    new_body.HasMember("likes") ? new_body["likes"].GetInt() : old_post[0]["likes"].as<int>(),
+                    new_body.HasMember("dislikes") ? new_body["dislikes"].GetInt() : old_post[0]["dislikes"].as<int>(),
+                    new_body.HasMember("saved") ? new_body["saved"].GetInt() : old_post[0]["saved_count"].as<int>(),
+                    new_body.HasMember("title") ? new_body["title"].GetString() : old_post[0]["title"].as<std::string>(),
+                    new_body.HasMember("author") ?  new_body["author"].GetString() : old_post[0]["author"].as<std::string>(),
+                    new_body.HasMember("text") ? new_body["text"].GetString() : old_post[0]["text"].as<std::string>(),
+                    new_body.HasMember("category") ? new_body["category"].GetString() : old_post[0]["category_name"].as<std::string>(),
+                    pool_ptr, logger_ptr
+                );
+            } catch (const std::exception& e) {
+                logger_ptr->error( [e]{return fmt::format("error updating post: {}", e.what());});
+                return req->create_response(restinio::status_internal_server_error()).done();
+            }
+            std::vector<std::string> media_paths;
+            page::med_to_vec(new_body, media_paths);
+            if (!media_paths.empty()) {
+                page::add_media(new_body["post_id"].GetInt(), media_paths, pool_ptr, logger_ptr);
+            }
+
+            return req->create_response(restinio::status_ok())
+                .append_header("Content-Type", "application/json; charset=utf-8")
+                .set_body(cp::serialize(page::get_page_content(new_body["post_id"].GetInt(), pool_ptr)))
+                .done();
+        });
+    }
 }

@@ -391,7 +391,8 @@ namespace page::server {
             if (token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
-            if (!auth::is_admin(token, pool_ptr)) {
+            // TODO: can delete if author
+            if (!auth::is_admin(token, pool_ptr) || auth::get_username(token, pool_ptr) == "anonymous") {
                 logger_ptr->info([]{return "not admin";});
                 return req->create_response(restinio::status_unauthorized()).done();
             }
@@ -426,15 +427,16 @@ namespace page::server {
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
 
-            auto old_post = page::get_page_content(new_body["post_id"].GetInt(), pool_ptr);
-            logger_ptr->info( [post_id = new_body["post_id"].GetInt()]{return fmt::format("update post with id {}", post_id);});
+            auto old_post = page::get_page_content(stoi(new_body["post_id"].GetString()), pool_ptr);
+            logger_ptr->info( [post_id = new_body["post_id"].GetString()]{return fmt::format("update post with id {}", post_id);});
+            
             try {
                 page::update_post(
-                    new_body.HasMember("post_id") ? new_body["post_id"].GetInt() : old_post[0]["post_id"].as<int>(),
-                    new_body.HasMember("is_secret") ? new_body["is_secret"].GetBool() : old_post[0]["is_secret"].as<bool>(),
-                    new_body.HasMember("likes") ? new_body["likes"].GetInt() : old_post[0]["likes"].as<int>(),
-                    new_body.HasMember("dislikes") ? new_body["dislikes"].GetInt() : old_post[0]["dislikes"].as<int>(),
-                    new_body.HasMember("saved") ? new_body["saved"].GetInt() : old_post[0]["saved_count"].as<int>(),
+                    new_body.HasMember("post_id") ? stoi(new_body["post_id"].GetString()) : old_post[0]["post_id"].as<int>(),
+                    new_body.HasMember("is_secret") ? new_body["is_secret"].GetString()[0] == 't' : old_post[0]["is_secret"].as<bool>(),
+                    new_body.HasMember("likes") ? stoi(new_body["likes"].GetString()) : old_post[0]["likes"].as<int>(),
+                    new_body.HasMember("dislikes") ? stoi(new_body["dislikes"].GetString()) : old_post[0]["dislikes"].as<int>(),
+                    new_body.HasMember("saved") ? stoi(new_body["saved"].GetString()) : old_post[0]["saved_count"].as<int>(),
                     new_body.HasMember("title") ? new_body["title"].GetString() : old_post[0]["title"].as<std::string>(),
                     new_body.HasMember("author") ?  new_body["author"].GetString() : old_post[0]["author"].as<std::string>(),
                     new_body.HasMember("text") ? new_body["text"].GetString() : old_post[0]["text"].as<std::string>(),
@@ -448,12 +450,12 @@ namespace page::server {
             std::vector<std::string> media_paths;
             page::med_to_vec(new_body, media_paths);
             if (!media_paths.empty()) {
-                page::add_media(new_body["post_id"].GetInt(), media_paths, pool_ptr, logger_ptr);
+                page::add_media(stoi(new_body["post_id"].GetString()), media_paths, pool_ptr, logger_ptr);
             }
 
             return req->create_response(restinio::status_ok())
                 .append_header("Content-Type", "application/json; charset=utf-8")
-                .set_body(cp::serialize(page::get_page_content(new_body["post_id"].GetInt(), pool_ptr)))
+                .set_body(cp::serialize(page::get_page_content(stoi(new_body["post_id"].GetString()), pool_ptr)))
                 .done();
         });
     }

@@ -545,7 +545,9 @@ namespace social::server {
                 return req->create_response(restinio::status_bad_request()).done();
             }
             try {
-                int post_id = social::add_comment(new_body["comment"].GetString(), new_body["post_id"].GetString(), username, pool_ptr);
+                std::string comment = new_body["comment"].GetString();
+                assist::fix_new_lines(comment);
+                int post_id = social::add_comment(comment, new_body["post_id"].GetString(), username, pool_ptr);
                 pqxx::result result = social::get_post(std::to_string(post_id), username, pool_ptr);
                 return req->create_response()
                     .set_body(cp::serialize(result))

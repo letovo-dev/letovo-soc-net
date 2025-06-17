@@ -207,7 +207,8 @@ namespace page::server {
                     logger_ptr->info( []{return "bad request";});
                     return req->create_response(restinio::status_bad_request()).done();
                 }
-
+                std::string text = new_body["text"].GetString();
+                assist::fix_new_lines(text);
                 post_id = page::add_page_by_content(
                     new_body.HasMember("is_secret") ? new_body["is_secret"].GetBool() : false,
                     new_body.HasMember("likes") ? new_body["likes"].GetInt() : 0,
@@ -215,7 +216,7 @@ namespace page::server {
                     new_body.HasMember("saved") ? new_body["saved"].GetInt() : 0,
                     new_body["title"].GetString(),
                     new_body.HasMember("author") ? new_body["author"].GetString() : auth::get_username(token, pool_ptr),
-                    new_body["text"].GetString(),
+                    text,
                     pool_ptr, logger_ptr
                 );
 

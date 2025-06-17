@@ -13,6 +13,7 @@
 #include "../basic/auth.h"
 #include "../basic/media.h"
 #include "../basic/config.h"
+#include "../basic/assist_funcs.h"
 
 namespace social {
     pqxx::result get_authors_list(std::shared_ptr<cp::ConnectionsManager> pool_ptr);

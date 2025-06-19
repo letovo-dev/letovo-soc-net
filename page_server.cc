@@ -78,9 +78,9 @@ namespace page {
         con->execute_params("DELETE FROM \"posts\" WHERE \"post_id\"=($1);", params, true);
         pool_ptr->returnConnection(std::move(con));
     }
-    void update_post(int post_id, bool is_secret, int likes, int dislikes, int saved, std::string title, std::string author, std::string text, std::string category, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+    void update_post(int post_id, bool is_secret, int likes, int dislikes, int saved_count, std::string title, std::string author, std::string text, std::string category, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         auto con = std::move(pool_ptr->getConnection());
-        std::vector<std::string> params = {std::to_string(is_secret), std::to_string(likes), std::to_string(dislikes), std::to_string(saved), title, author, text, category, std::to_string(post_id)};
+        std::vector<std::string> params = {std::to_string(is_secret), std::to_string(likes), std::to_string(dislikes), std::to_string(saved_count), title, author, text, category, std::to_string(post_id)};
 
         con->execute_params("UPDATE \"posts\" SET \"is_secret\"=($1), \"likes\"=($2), \"dislikes\"=($3), \"saved_count\"=($4), \"title\"=($5), \"author\"=($6), \"text\"=($7), \"category_name\"=($8) WHERE \"post_id\"=($9);", params, true);
         con->execute("select normalize_post_categories();", true);
@@ -437,7 +437,7 @@ namespace page::server {
                     new_body.HasMember("is_secret") ? new_body["is_secret"].GetString()[0] == 't' : old_post[0]["is_secret"].as<bool>(),
                     new_body.HasMember("likes") ? stoi(new_body["likes"].GetString()) : old_post[0]["likes"].as<int>(),
                     new_body.HasMember("dislikes") ? stoi(new_body["dislikes"].GetString()) : old_post[0]["dislikes"].as<int>(),
-                    new_body.HasMember("saved") ? stoi(new_body["saved"].GetString()) : old_post[0]["saved_count"].as<int>(),
+                    new_body.HasMember("saved_count") ? stoi(new_body["saved_count"].GetString()) : old_post[0]["saved_count"].as<int>(),
                     new_body.HasMember("title") ? new_body["title"].GetString() : old_post[0]["title"].as<std::string>(),
                     new_body.HasMember("author") ?  new_body["author"].GetString() : old_post[0]["author"].as<std::string>(),
                     new_body.HasMember("text") ? new_body["text"].GetString() : old_post[0]["text"].as<std::string>(),
@@ -456,7 +456,7 @@ namespace page::server {
 
             return req->create_response(restinio::status_ok())
                 .append_header("Content-Type", "application/json; charset=utf-8")
-                .set_body(cp::serialize(page::get_page_content(stoi(new_body["post_id"].GetString()), pool_ptr)))
+                .set_body(cp::serialize(social::get_post(new_body["post_id"].GetString(), auth::get_username(token, pool_ptr), pool_ptr)))
                 .done();
         });
     }

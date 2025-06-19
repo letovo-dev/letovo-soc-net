@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <any>
 #include "authors.h"
+#include "social.h"
 #include "../basic/pqxx_cp.h"
 #include "../basic/assist_funcs.h"
 #include "../basic/url_parser.h"

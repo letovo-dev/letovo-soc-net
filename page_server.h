@@ -14,6 +14,8 @@
 #include "../basic/url_parser.h"
 #include "../basic/auth.h"
 #include "../basic/config.h"
+#include "../basic/comment.h"
+#include "../basic/config.h"
 namespace page {
 
     pqxx::result get_page_content(int post_id, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
@@ -41,6 +43,8 @@ namespace page {
     void add_media(int post_id, std::vector<std::string> &media_paths, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr);
 
     void med_to_vec(const rapidjson::Document& new_body, std::vector<std::string>& out_media);
+
+    void reveal_secret_page(int post_id, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 }
 
 namespace page::server {
@@ -63,4 +67,6 @@ namespace page::server {
     void rename_category(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr);
 
     void update_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr);
+
+    void reveal_secret_page(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr);
 }

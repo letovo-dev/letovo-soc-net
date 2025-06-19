@@ -109,6 +109,13 @@ namespace page {
             }
         }
     }
+
+    void reveal_secret_page(int post_id, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+        std::vector<int> params = {post_id};
+        con->execute_params("UPDATE \"posts\" SET \"is_secret\"=false WHERE \"post_id\"=($1);", params, true);
+        pool_ptr->returnConnection(std::move(con));
+    }
 }
 
 
@@ -459,6 +466,21 @@ namespace page::server {
             return req->create_response(restinio::status_ok())
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .set_body(cp::serialize(social::get_post(new_body["post_id"].GetString(), auth::get_username(token, pool_ptr), pool_ptr)))
+                .done();
+        });
+    }
+
+    void reveal_secret_page(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_get(R"(/post/reveal_secret/:id(\d+))", [pool_ptr, logger_ptr](auto req, auto params) {
+            int post_id = url::last_int_from_url_path(req->header().path());
+            if (post_id <= 0) {
+                return req->create_response(restinio::status_bad_request()).done();
+            }
+
+            page::reveal_secret_page(post_id, pool_ptr);
+            return req->create_response(restinio::status_ok())
+                .append_header("Content-Type", "text/plain; charset=utf-8")
+                .set_body(Comment::giveMe().reveal_secret)
                 .done();
         });
     }

@@ -432,6 +432,8 @@ namespace page::server {
             logger_ptr->info( [post_id = new_body["post_id"].GetString()]{return fmt::format("update post with id {}", post_id);});
             
             try {
+                std::string text = new_body.HasMember("text") ? new_body["text"].GetString() : old_post[0]["text"].as<std::string>();
+                assist::fix_new_lines(text);
                 page::update_post(
                     new_body.HasMember("post_id") ? stoi(new_body["post_id"].GetString()) : old_post[0]["post_id"].as<int>(),
                     new_body.HasMember("is_secret") ? new_body["is_secret"].GetString()[0] == 't' : old_post[0]["is_secret"].as<bool>(),
@@ -440,7 +442,7 @@ namespace page::server {
                     new_body.HasMember("saved_count") ? stoi(new_body["saved_count"].GetString()) : old_post[0]["saved_count"].as<int>(),
                     new_body.HasMember("title") ? new_body["title"].GetString() : old_post[0]["title"].as<std::string>(),
                     new_body.HasMember("author") ?  new_body["author"].GetString() : old_post[0]["author"].as<std::string>(),
-                    new_body.HasMember("text") ? new_body["text"].GetString() : old_post[0]["text"].as<std::string>(),
+                    text,
                     new_body.HasMember("category") ? new_body["category"].GetString() : old_post[0]["category_name"].as<std::string>(),
                     pool_ptr, logger_ptr
                 );

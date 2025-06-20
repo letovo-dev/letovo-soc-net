@@ -579,11 +579,18 @@ namespace social::server {
 
             std::string category = url::get_last_url_arg(qrl);
 
+            logger_ptr->info([category] { return fmt::format("get post by category request for {}", category); });
+
             if (category == "category" || category.empty()) {
                 return req->create_response(restinio::status_bad_request()).done();
             }
-
-            pqxx::result result = social::get_post_by_category(category, pool_ptr);
+            pqxx::result result;
+            try {
+                result = social::get_post_by_category(category, pool_ptr);
+            } catch (const std::exception& e) {
+                logger_ptr->error([e] { return fmt::format("Error: {}", e.what()); });
+                return req->create_response(restinio::status_internal_server_error()).done();
+            }
 
             if (result.empty()) {
                 return req->create_response(restinio::status_bad_gateway()).done();

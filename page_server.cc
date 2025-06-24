@@ -99,6 +99,21 @@ namespace page {
         pool_ptr->returnConnection(std::move(con));
     }
 
+    void delete_media(int post_id, std::vector<std::string> &media_paths, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+        std::vector<std::string> params(2);
+        for (const auto& media_path : media_paths) {
+            params[0] = std::to_string(post_id);
+            params[1] = media_path;
+            try {
+                con->execute_params("DELETE FROM \"post_media\" WHERE \"post_id\"=($1) AND \"media\"=($2);", params, true);
+            } catch (const std::exception& e) {
+                logger_ptr->error( [e]{return fmt::format("error deleting media: {}", e.what());});
+            }
+        }
+        pool_ptr->returnConnection(std::move(con));
+    }
+
     void med_to_vec(const rapidjson::Document& new_body, std::vector<std::string>& out_media) {
         if (new_body.HasMember("media") && new_body["media"].IsArray()) {
             const rapidjson::Value& mediaArray = new_body["media"];
@@ -467,6 +482,70 @@ namespace page::server {
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .set_body(cp::serialize(social::get_post(new_body["post_id"].GetString(), auth::get_username(token, pool_ptr), pool_ptr)))
                 .done();
+        });
+    }
+
+    void add_media(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_post("/post/add_media", [pool_ptr, logger_ptr](auto req, auto) {
+            std::string token;
+            try {
+                token = req->header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            if (token.empty()) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            if (!auth::is_admin(token, pool_ptr)) {
+                logger_ptr->info([]{return "not admin";});
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            rapidjson::Document new_body;
+            new_body.Parse(req->body().c_str());
+
+            if (new_body.HasMember("post_id") && new_body.HasMember("media")) {
+                std::vector<std::string> media_paths;
+                page::med_to_vec(new_body, media_paths);
+                if (!media_paths.empty()) {
+                    page::add_media(new_body["post_id"].GetInt(), media_paths, pool_ptr, logger_ptr);
+                }
+                return req->create_response(restinio::status_ok())
+                    .append_header("Content-Type", "text/plain; charset=utf-8")
+                    .set_body("ok")
+                    .done();
+            } else return req->create_response(restinio::status_non_authoritative_information()).done();
+        });
+    }
+
+    void delete_media(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_delete("/post/delete_media", [pool_ptr, logger_ptr](auto req, auto) {
+            std::string token;
+            try {
+                token = req->header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            if (token.empty()) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            if (!auth::is_admin(token, pool_ptr)) {
+                logger_ptr->info([]{return "not admin";});
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            rapidjson::Document new_body;
+            new_body.Parse(req->body().c_str());
+
+            if (new_body.HasMember("post_id") && new_body.HasMember("media")) {
+                std::vector<std::string> media_paths;
+                page::med_to_vec(new_body, media_paths);
+                if (!media_paths.empty()) {
+                    page::delete_media(new_body["post_id"].GetInt(), media_paths, pool_ptr, logger_ptr);
+                }
+                return req->create_response(restinio::status_ok())
+                    .append_header("Content-Type", "text/plain; charset=utf-8")
+                    .set_body("ok")
+                    .done();
+            } else return req->create_response(restinio::status_non_authoritative_information()).done();
         });
     }
 

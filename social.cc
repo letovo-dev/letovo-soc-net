@@ -32,11 +32,7 @@ namespace social {
         std::vector<std::string> params = {post_id};
         pqxx::result result;
         result = con->execute_params("SELECT * FROM \"post_media\" WHERE \"post_media\".post_id=($1) and \"post_media\".is_secret=false;", params);
-        // if(pics) {
-        //     result = con->execute_params("SELECT * FROM \"post_media\" WHERE \"post_media\".post_id=($1) AND \"post_media\".is_pic=true;", params);
-        // } else {
-        //     result = con->execute_params("SELECT * FROM \"post_media\" WHERE \"post_media\".post_id=($1) AND \"post_media\".is_pic=false;", params);
-        // }
+        
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -119,7 +115,7 @@ namespace social {
     pqxx::result get_all_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username};
-        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null and p.post_path is not null ORDER BY p.title;", params);
+        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null and p.post_path is not null ORDER BY p.date;", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }

@@ -233,9 +233,9 @@ namespace page::server {
                 assist::fix_new_lines(text);
                 post_id = page::add_page_by_content(
                     new_body.HasMember("is_secret") ? new_body["is_secret"].GetBool() : false,
-                    new_body.HasMember("likes") ? new_body["likes"].GetInt() : 0,
-                    new_body.HasMember("dislikes") ? new_body["dislikes"].GetInt() : 0,
-                    new_body.HasMember("saved") ? new_body["saved"].GetInt() : 0,
+                    new_body.HasMember("likes") ? stoi(new_body["likes"].GetString()) : 0,
+                    new_body.HasMember("dislikes") ? stoi(new_body["dislikes"].GetString()) : 0,
+                    new_body.HasMember("saved") ? stoi(new_body["saved"].GetString()) : 0,
                     new_body["title"].GetString(),
                     new_body.HasMember("author") ? new_body["author"].GetString() : auth::get_username(token, pool_ptr),
                     text,

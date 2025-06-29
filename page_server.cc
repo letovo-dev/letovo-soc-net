@@ -216,7 +216,7 @@ namespace page::server {
                     new_body["post_path"].GetString(),
                     new_body.HasMember("category") ? new_body["category"].GetString() : "",
                     new_body.HasMember("title") ? new_body["title"].GetString() : "",
-                    new_body.HasMember("is_secret") ? new_body["is_secret"].GetBool() : false,
+                    new_body.HasMember("is_secret") ? (new_body["is_secret"].GetString()[0] == 't') : false,
                     pool_ptr, logger_ptr
                 );
             } else {
@@ -232,7 +232,7 @@ namespace page::server {
                 std::string text = new_body["text"].GetString();
                 assist::fix_new_lines(text);
                 post_id = page::add_page_by_content(
-                    new_body.HasMember("is_secret") ? new_body["is_secret"].GetBool() : false,
+                    new_body.HasMember("is_secret") ? (new_body["is_secret"].GetString()[0] == 't') : false,
                     new_body.HasMember("likes") ? stoi(new_body["likes"].GetString()) : 0,
                     new_body.HasMember("dislikes") ? stoi(new_body["dislikes"].GetString()) : 0,
                     new_body.HasMember("saved") ? stoi(new_body["saved"].GetString()) : 0,
@@ -240,6 +240,7 @@ namespace page::server {
                     new_body.HasMember("author") ? new_body["author"].GetString() : auth::get_username(token, pool_ptr),
                     text,
                     pool_ptr, logger_ptr
+    
                 );
 
                 std::vector<std::string> media_paths;

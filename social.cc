@@ -158,7 +158,7 @@ namespace social {
     pqxx::result get_post_categories(std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
 
-        pqxx::result result = con->execute("select distinct p.category, p.category_name from \"posts\" p WHERE p.post_path is not null;");
+        pqxx::result result = con->execute("select pc.category_id as category, pc.category_name from \"post_category\" pc;");
 
         pool_ptr->returnConnection(std::move(con));
 
@@ -173,7 +173,7 @@ namespace social {
 
         std::vector<std::string> params = {category};
 
-        pqxx::result result = con->execute_params("select * from \"posts\" p where p.category = ($1) AND p.post_path is not null;", params);
+        pqxx::result result = con->execute_params("select p.*, pc.category_name from \"posts\" p left join \"post_category\" pc on p.category = pc.category_id where p.category = ($1) AND p.post_path is not null;", params);
 
         pool_ptr->returnConnection(std::move(con));
 

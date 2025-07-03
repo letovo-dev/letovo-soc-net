@@ -540,6 +540,9 @@ namespace social::server {
             if(!new_body.HasMember("post_id") || !new_body.HasMember("comment")) {
                 return req->create_response(restinio::status_bad_request()).done();
             }
+            if(new_body.HasMember("author") && authors::check_if_avaluable_author(username, new_body["author"].GetString(), pool_ptr)) {
+                username = new_body["author"].GetString();
+            }
             try {
                 std::string comment = new_body["comment"].GetString();
                 assist::fix_new_lines(comment);

@@ -126,7 +126,7 @@ namespace achivements {
 
         std::vector<std::string> params = {username, department_id};
 
-        pqxx::result result = con->execute_params("select * from \"user_achivements\" right join \"achivements\" on \"user_achivements\".achivement_id = \"achivements\".achivement_id where \"user_achivements\".username = ($1) or \"user_achivements\".username is null and \"achivements\".departmentid = ($2) order by \"achivement_tree\" asc, \"level\" desc;", params);
+        pqxx::result result = con->execute_params("select ua.id, ua.username, ua.achivement_id, ua.datetime, ua.stage as level, ach.achivement_id, ach.achivement_pic, ach.achivement_name, ach.achivement_decsription, ach.achivement_tree, ach.stages, ach.category, ach.category_name, ach.departmentid from \"user_achivements\" ua right join \"achivements\" ach on ua.achivement_id = ach.achivement_id where (ua.username = ($1) or ua.username is null) and ach.departmentid = ($2) order by \"achivement_tree\" asc--, \"level\" desc;", params);
 
         pool_ptr->returnConnection(std::move(con));
 

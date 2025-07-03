@@ -205,7 +205,13 @@ namespace page::server {
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
             int post_id;
-
+            std::string title;
+            if(new_body.HasMember("title")) {
+                title = new_body["title"].GetString();
+                assist::fix_new_lines(title);
+            } else {
+                title = "";
+            }
             if(new_body.HasMember("post_path")) {
                 if(!auth::is_admin(token, pool_ptr)) {
                     logger_ptr->info( []{return "not admin";});
@@ -214,8 +220,8 @@ namespace page::server {
                 logger_ptr->info( []{return "add new wiki page";});
                 post_id = page::add_page_by_page(
                     new_body["post_path"].GetString(),
-                    new_body.HasMember("category") ? new_body["category"].GetString() : "",
-                    new_body.HasMember("title") ? new_body["title"].GetString() : "",
+                    new_body.HasMember("category_name") ? new_body["category_name"].GetString() : "",
+                    title,
                     new_body.HasMember("is_secret") ? (new_body["is_secret"].GetString()[0] == 't') : false,
                     pool_ptr, logger_ptr
                 );
@@ -230,13 +236,15 @@ namespace page::server {
                     return req->create_response(restinio::status_bad_request()).done();
                 }
                 std::string text = new_body["text"].GetString();
+                std::string title = new_body["title"].GetString();
                 assist::fix_new_lines(text);
+                assist::fix_new_lines(title);
                 post_id = page::add_page_by_content(
                     new_body.HasMember("is_secret") ? (new_body["is_secret"].GetString()[0] == 't') : false,
                     new_body.HasMember("likes") ? stoi(new_body["likes"].GetString()) : 0,
                     new_body.HasMember("dislikes") ? stoi(new_body["dislikes"].GetString()) : 0,
                     new_body.HasMember("saved") ? stoi(new_body["saved"].GetString()) : 0,
-                    new_body["title"].GetString(),
+                    title,
                     new_body.HasMember("author") ? new_body["author"].GetString() : auth::get_username(token, pool_ptr),
                     text,
                     pool_ptr, logger_ptr
@@ -453,7 +461,19 @@ namespace page::server {
 
             auto old_post = page::get_page_content(stoi(new_body["post_id"].GetString()), pool_ptr);
             logger_ptr->info( [post_id = new_body["post_id"].GetString()]{return fmt::format("update post with id {}", post_id);});
-            
+            std::string text, title;
+            if(new_body.HasMember("text")) {
+                text = new_body["text"].GetString();
+                assist::fix_new_lines(text);
+            } else {
+                text = old_post[0]["text"].as<std::string>();
+            }
+            if(new_body.HasMember("title")) {
+                title = new_body["title"].GetString();
+                assist::fix_new_lines(title);
+            } else {
+                title = old_post[0]["title"].as<std::string>();
+            }
             try {
                 std::string text = new_body.HasMember("text") ? new_body["text"].GetString() : old_post[0]["text"].as<std::string>();
                 assist::fix_new_lines(text);
@@ -463,10 +483,10 @@ namespace page::server {
                     new_body.HasMember("likes") ? stoi(new_body["likes"].GetString()) : old_post[0]["likes"].as<int>(),
                     new_body.HasMember("dislikes") ? stoi(new_body["dislikes"].GetString()) : old_post[0]["dislikes"].as<int>(),
                     new_body.HasMember("saved_count") ? stoi(new_body["saved_count"].GetString()) : old_post[0]["saved_count"].as<int>(),
-                    new_body.HasMember("title") ? new_body["title"].GetString() : old_post[0]["title"].as<std::string>(),
+                    title,
                     new_body.HasMember("author") ?  new_body["author"].GetString() : old_post[0]["author"].as<std::string>(),
                     text,
-                    new_body.HasMember("category") ? new_body["category"].GetString() : old_post[0]["category_name"].as<std::string>(),
+                    new_body.HasMember("category_name") ? new_body["category_name"].GetString() : old_post[0]["category_name"].as<std::string>(),
                     pool_ptr, logger_ptr
                 );
             } catch (const std::exception& e) {

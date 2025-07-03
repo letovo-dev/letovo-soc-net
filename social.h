@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <filesystem>
 #include <any>
+#include "authors.h"
 #include "../basic/assist_funcs.h"
 #include "../basic/url_parser.h"
 #include "../basic/auth.h"

@@ -140,6 +140,7 @@ namespace achivements {
 namespace achivements::server {
     void user_achivemets(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/achivements/user/:username([a-zA-Z0-9\-]+))", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /achivements/user/:username";});
             auto qrl = req->header().path();
 
             std::string username = url::get_last_url_arg(qrl);
@@ -161,6 +162,7 @@ namespace achivements::server {
 
     void full_user_achivemets(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/achivements/user/full/:username([a-zA-Z0-9\-]+))", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /achivements/user/full/:username";});
             auto qrl = req->header().path();
 
             std::string username = url::get_last_url_arg(qrl);
@@ -190,6 +192,7 @@ namespace achivements::server {
 
     void add_achivement(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_post("/achivements/add", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /achivements/add";});
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
 
@@ -224,6 +227,7 @@ namespace achivements::server {
 
     void delete_achivement(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_delete("/achivements/delete", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /achivements/delete";});
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
 
@@ -258,6 +262,7 @@ namespace achivements::server {
 
     void achivements_tree(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/achivements/tree/:tree_id([0-9]+))", [pool_ptr, logger_ptr](auto req, auto params) {
+            logger_ptr->trace([]{return "called /achivements/tree/:tree_id";});
             auto qrl = req->header().path();
 
             std::string tree_id = url::get_last_url_arg(qrl);
@@ -281,6 +286,7 @@ namespace achivements::server {
 
     void achivement_info(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/achivements/info/:achivement_id([0-9]+))", [pool_ptr, logger_ptr](auto req, auto params) {
+            logger_ptr->trace([]{return "called /achivements/info/:achivement_id";});
             auto qrl = req->header().path();
 
             std::string achivement_id = url::get_last_url_arg(qrl);
@@ -304,6 +310,7 @@ namespace achivements::server {
 
     void create_achivement(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_post("/achivements/create", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /achivements/create";});
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
 
@@ -356,6 +363,7 @@ namespace achivements::server {
 
     void achivement_pictures(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get("/achivements/pictures", [logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /achivements/pictures";});
             return req->create_response().set_body(cp::serialize(achivements::achivement_pictures()))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
@@ -364,6 +372,7 @@ namespace achivements::server {
 
     void no_department_achivements(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/achivements/no_dep)", [pool_ptr, logger_ptr](auto req, auto params) {
+            logger_ptr->trace([]{return "called /achivements/no_dep";});
             std::string token = req->header().get_field("Bearer");
             if (token.empty()) {
                 logger_ptr->info([]{return "token is empty";});
@@ -380,6 +389,7 @@ namespace achivements::server {
 
     void department_achivements_by_user(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/achivements/by_user)", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /achivements/by_user";});
             auto qrl = req->header().path();
 
             std::string token = req->header().get_field("Bearer");
@@ -404,6 +414,7 @@ namespace achivements::server {
     }
     void qr_code_by_achivement(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/achivements/qr_code/:achivement_id([0-9]+))", [pool_ptr, logger_ptr](auto req, auto params) {
+            logger_ptr->trace([]{return "called /achivements/qr_code/:achivement_id";});
             auto qrl = req->header().path();
 
             std::string achivement_id = url::get_last_url_arg(qrl);

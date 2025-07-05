@@ -137,6 +137,7 @@ namespace page {
 namespace page::server {
     void get_page_content(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/post/:id(\d+))", [pool_ptr, logger_ptr](auto req, auto params) {
+            logger_ptr->trace([]{return "called /post/:id";});
             std::string endpoint = req->remote_endpoint().address().to_string();
             auto qrl = req->header().path();
 
@@ -166,6 +167,7 @@ namespace page::server {
 
     void get_page_author(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/post/author/:username([a-zA-Z0-9\-]+))", [pool_ptr, logger_ptr](auto req, auto params) {
+            logger_ptr->trace([]{return "called /post/author/:username";});
             std::string endpoint = req->remote_endpoint().address().to_string();
             auto qrl = req->header().path();
 
@@ -190,6 +192,7 @@ namespace page::server {
 
     void add_page(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_post("/post/add_page", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /post/add_page";});
             std::string token;
             try {
                 token = req->header().get_field("Bearer");
@@ -268,6 +271,7 @@ namespace page::server {
 
     void update_likes(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_put("/post/update_likes", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /post/update_likes";});
             if(!auth::is_authed_by_body(req->body(), pool_ptr)) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
@@ -290,6 +294,7 @@ namespace page::server {
 
     void get_favourite_posts(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get("/post/favourite/", [pool_ptr, logger_ptr](auto req, auto params) {
+            logger_ptr->trace([]{return "called /post/favourite/";});
             std::string token;
             try {
                 token = req -> header().get_field("Bearer");
@@ -318,6 +323,7 @@ namespace page::server {
 
     void post_add_favourite_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_post("/post/favourite", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /post/favourite";});
             std::string endpoint = req->remote_endpoint().address().to_string();
 
             rapidjson::Document new_body;
@@ -358,6 +364,7 @@ namespace page::server {
 
     void delete_favourite_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_delete(R"(/post/favourite/:id(\d+))", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /post/favourite/:id";});
             std::vector<std::string> url_parts = url::spilt_url_path(req->header().path(), "/");
             std::string token;
             try {
@@ -388,6 +395,7 @@ namespace page::server {
 
     void rename_category(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_put("/post/rename_category", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /post/rename_category";});
             std::string token;
             try {
                 token = req -> header().get_field("Bearer");
@@ -414,6 +422,7 @@ namespace page::server {
 
     void delete_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_delete("/post/delete", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /post/delete";});
             std::string token;
             try {
                 token = req -> header().get_field("Bearer");
@@ -443,6 +452,7 @@ namespace page::server {
     
     void update_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_put("/post/update", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /post/update";});
             std::string token;
             try {
                 token = req -> header().get_field("Bearer");
@@ -508,6 +518,7 @@ namespace page::server {
 
     void add_media(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_post("/post/add_media", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /post/add_media";});
             std::string token;
             try {
                 token = req->header().get_field("Bearer");
@@ -540,6 +551,7 @@ namespace page::server {
 
     void delete_media(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_delete("/post/delete_media", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /post/delete_media";});
             std::string token;
             try {
                 token = req->header().get_field("Bearer");
@@ -572,6 +584,7 @@ namespace page::server {
 
     void reveal_secret_page(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/post/reveal_secret/:id(\d+))", [pool_ptr, logger_ptr](auto req, auto params) {
+            logger_ptr->trace([]{return "called /post/reveal_secret/:id";});
             int post_id = url::last_int_from_url_path(req->header().path());
             if (post_id <= 0) {
                 return req->create_response(restinio::status_bad_request()).done();

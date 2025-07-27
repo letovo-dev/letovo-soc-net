@@ -126,7 +126,7 @@ namespace achivements {
 
         std::vector<std::string> params = {username, department_id};
 
-        pqxx::result result = con->execute_params("select ua.id, ua.username, ua.achivement_id, ua.datetime, ua.stage as level, ach.achivement_id, ach.achivement_pic, ach.achivement_name, ach.achivement_decsription, ach.achivement_tree, ach.stages, ach.category, ach.category_name, ach.departmentid from \"user_achivements\" ua right join \"achivements\" ach on ua.achivement_id = ach.achivement_id where (ua.username = ($1) or ua.username is null) and ach.departmentid = ($2) order by \"achivement_tree\" asc--, \"level\" desc;", params);
+        pqxx::result result = con->execute_params("select ua.id, ua.username, ua.achivement_id, ua.datetime, ua.stage as level, ach.achivement_id, ach.achivement_pic, ach.achivement_name, ach.achivement_decsription, ach.achivement_tree, ach.stages, ach.category, ach.category_name, ach.departmentid from \"user_achivements\" ua right join \"achivements\" ach on ua.achivement_id = ach.achivement_id and ua.username = ($1) where ach.departmentid = ($2) order by \"achivement_tree\" asc--, \"level\" desc;", params);
 
         pool_ptr->returnConnection(std::move(con));
 
@@ -213,7 +213,7 @@ namespace achivements::server {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
 
-            if (!auth::is_admin(token, pool_ptr)) {
+            if (!auth::is_admin(token, pool_ptr) && !auth::is_rights_by_username(auth::get_username(token, pool_ptr), pool_ptr, "moder")) {
                 logger_ptr->info([]{return "not admin";});
                 return req->create_response(restinio::status_unauthorized()).done();
             }

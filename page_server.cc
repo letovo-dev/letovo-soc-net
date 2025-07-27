@@ -78,12 +78,12 @@ namespace page {
         con->execute_params("DELETE FROM \"posts\" WHERE \"post_id\"=($1);", params, true);
         pool_ptr->returnConnection(std::move(con));
     }
-    void update_post(int post_id, bool is_secret, int likes, int dislikes, int saved_count, std::string title, std::string author, std::string text, std::string category, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+    void update_post(int post_id, bool is_secret, int likes, int dislikes, int saved_count, std::string title, std::string author, std::string text, std::string category, std::string post_path, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         auto con = std::move(pool_ptr->getConnection());
-        std::vector<std::string> params = {std::to_string(is_secret), std::to_string(likes), std::to_string(dislikes), std::to_string(saved_count), title, author, text, category, std::to_string(post_id)};
+        std::vector<std::string> params = {std::to_string(is_secret), std::to_string(likes), std::to_string(dislikes), std::to_string(saved_count), title, author, text, category, std::to_string(post_id), post_path};
 
-        con->execute_params("UPDATE \"posts\" SET \"is_secret\"=($1), \"likes\"=($2), \"dislikes\"=($3), \"saved_count\"=($4), \"title\"=($5), \"author\"=($6), \"text\"=($7), \"category_name\"=($8) WHERE \"post_id\"=($9);", params, true);
-        con->execute("select normalize_post_categories();", true);
+        con->execute_params("UPDATE \"posts\" SET \"is_secret\"=($1), \"likes\"=($2), \"dislikes\"=($3), \"saved_count\"=($4), \"title\"=($5), \"author\"=($6), \"text\"=($7), \"category_name\"=($8), \"post_path\"=($9) WHERE \"post_id\"=($9);", params, true);
+        // con->execute("select normalize_post_categories();", true);
         pool_ptr->returnConnection(std::move(con));
     }
 
@@ -230,7 +230,14 @@ namespace page::server {
                 );
             } else {
                 logger_ptr->info( []{return "add new news post";});
-                if(!authors::check_if_avaluable_author(auth::get_username(token, pool_ptr), new_body.HasMember("author") ? new_body["author"].GetString() : auth::get_username(token, pool_ptr), pool_ptr)) {
+                std::string author;
+                if(new_body.HasMember("author")) {
+                    author = new_body["author"].GetString();
+                } else {
+                    author = auth::get_username(token, pool_ptr);
+                }
+                assist::fix_new_lines(author);
+                if(!authors::check_if_avaluable_author(auth::get_username(token, pool_ptr), author, pool_ptr)) {
                     logger_ptr->info( []{return "bad author";});
                     return req->create_response(restinio::status_non_authoritative_information()).done();
                 }
@@ -433,20 +440,22 @@ namespace page::server {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             // TODO: can delete if author
-            if (!auth::is_admin(token, pool_ptr) || auth::get_username(token, pool_ptr) == "anonymous") {
-                logger_ptr->info([]{return "not admin";});
-                return req->create_response(restinio::status_unauthorized()).done();
-            }
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
+            if (!new_body.HasMember("post_id")) {
+                return req->create_response(restinio::status_non_authoritative_information()).done();
+            }
+            std::string post_author = page::get_page_content(new_body["post_id"].GetInt(), pool_ptr)[0]["author"].as<std::string>();
+            if (!authors::check_if_avaluable_author(auth::get_username(token, pool_ptr), post_author, pool_ptr)) {
+                logger_ptr->info([]{return "not admin";});
+                return req->create_response(restinio::status_unauthorized()).set_body("not your post - do not touch it!").done();
+            }
 
-            if (new_body.HasMember("post_id")) {
-                page::delete_post(new_body["post_id"].GetInt(), pool_ptr, logger_ptr);
-                return req->create_response(restinio::status_ok())
-                    .append_header("Content-Type", "text/plain; charset=utf-8")
-                    .set_body("ok")
-                    .done();
-            } else return req->create_response(restinio::status_non_authoritative_information()).done();
+            page::delete_post(new_body["post_id"].GetInt(), pool_ptr, logger_ptr);
+            return req->create_response(restinio::status_ok())
+                .append_header("Content-Type", "text/plain; charset=utf-8")
+                .set_body("ok")
+                .done();
         });
     }   
     
@@ -468,10 +477,9 @@ namespace page::server {
             }
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
-
             auto old_post = page::get_page_content(stoi(new_body["post_id"].GetString()), pool_ptr);
             logger_ptr->info( [post_id = new_body["post_id"].GetString()]{return fmt::format("update post with id {}", post_id);});
-            std::string text, title;
+            std::string text, title, author;
             if(new_body.HasMember("text")) {
                 text = new_body["text"].GetString();
                 assist::fix_new_lines(text);
@@ -484,6 +492,12 @@ namespace page::server {
             } else {
                 title = old_post[0]["title"].as<std::string>();
             }
+            if(new_body.HasMember("author") && authors::check_if_avaluable_author(auth::get_username(token, pool_ptr), new_body["author"].GetString(), pool_ptr)) {
+                author = new_body["author"].GetString();
+                assist::fix_new_lines(author);
+            } else {
+                author = old_post[0]["author"].as<std::string>();
+            }
             try {
                 std::string text = new_body.HasMember("text") ? new_body["text"].GetString() : old_post[0]["text"].as<std::string>();
                 assist::fix_new_lines(text);
@@ -494,9 +508,10 @@ namespace page::server {
                     new_body.HasMember("dislikes") ? stoi(new_body["dislikes"].GetString()) : old_post[0]["dislikes"].as<int>(),
                     new_body.HasMember("saved_count") ? stoi(new_body["saved_count"].GetString()) : old_post[0]["saved_count"].as<int>(),
                     title,
-                    new_body.HasMember("author") ?  new_body["author"].GetString() : old_post[0]["author"].as<std::string>(),
+                    author,
                     text,
                     new_body.HasMember("category_name") ? new_body["category_name"].GetString() : old_post[0]["category_name"].as<std::string>(),
+                    new_body.HasMember("post_path") ? new_body["post_path"].GetString() : old_post[0]["post_path"].as<std::string>(),
                     pool_ptr, logger_ptr
                 );
             } catch (const std::exception& e) {

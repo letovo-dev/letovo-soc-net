@@ -83,7 +83,7 @@ namespace page {
         std::vector<std::string> params = {std::to_string(is_secret), std::to_string(likes), std::to_string(dislikes), std::to_string(saved_count), title, author, text, category, std::to_string(post_id), post_path};
 
         con->execute_params("UPDATE \"posts\" SET \"is_secret\"=($1), \"likes\"=($2), \"dislikes\"=($3), \"saved_count\"=($4), \"title\"=($5), \"author\"=($6), \"text\"=($7), \"category_name\"=($8), \"post_path\"=($9) WHERE \"post_id\"=($9);", params, true);
-        // con->execute("select normalize_post_categories();", true);
+        con->execute("select normalize_post_categories();", true);
         pool_ptr->returnConnection(std::move(con));
     }
 

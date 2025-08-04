@@ -80,9 +80,9 @@ namespace page {
     }
     void update_post(int post_id, bool is_secret, int likes, int dislikes, int saved_count, std::string title, std::string author, std::string text, std::string category, std::string post_path, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         auto con = std::move(pool_ptr->getConnection());
-        std::vector<std::string> params = {std::to_string(is_secret), std::to_string(likes), std::to_string(dislikes), std::to_string(saved_count), title, author, text, category, std::to_string(post_id), post_path};
+        std::vector<std::string> params = {std::to_string(is_secret), std::to_string(likes), std::to_string(dislikes), std::to_string(saved_count), title, author, text, category, post_path, std::to_string(post_id)};
 
-        con->execute_params("UPDATE \"posts\" SET \"is_secret\"=($1), \"likes\"=($2), \"dislikes\"=($3), \"saved_count\"=($4), \"title\"=($5), \"author\"=($6), \"text\"=($7), \"category_name\"=($8), \"post_path\"=($9) WHERE \"post_id\"=($9);", params, true);
+        con->execute_params("UPDATE \"posts\" SET \"is_secret\"=($1), \"likes\"=($2), \"dislikes\"=($3), \"saved_count\"=($4), \"title\"=($5), \"author\"=($6), \"text\"=($7), \"category_name\"=($8), \"post_path\"=($9) WHERE \"post_id\"=($10);", params, true);
         con->execute("select normalize_post_categories();", true);
         pool_ptr->returnConnection(std::move(con));
     }
@@ -499,8 +499,8 @@ namespace page::server {
                 author = old_post[0]["author"].as<std::string>();
             }
             try {
-                std::string text = new_body.HasMember("text") ? new_body["text"].GetString() : old_post[0]["text"].as<std::string>();
-                assist::fix_new_lines(text);
+                // std::string text = new_body.HasMember("text") ? new_body["text"].GetString() : old_post[0]["text"].as<std::string>();
+                // assist::fix_new_lines(text);
                 page::update_post(
                     new_body.HasMember("post_id") ? stoi(new_body["post_id"].GetString()) : old_post[0]["post_id"].as<int>(),
                     new_body.HasMember("is_secret") ? new_body["is_secret"].GetString()[0] == 't' : old_post[0]["is_secret"].as<bool>(),

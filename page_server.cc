@@ -13,7 +13,7 @@ namespace page {
     pqxx::result get_page_author(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username};
-        pqxx::result result = con->execute_params("SELECT \"username\", \"avatar_pic\" from \"user\" WHERE \"username\"=($1);", params);
+        pqxx::result result = con->execute_params("SELECT \"username\", \"avatar_pic\", \"display_name\" from \"user\" WHERE \"username\"=($1);", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }

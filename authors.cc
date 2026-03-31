@@ -5,7 +5,7 @@ namespace authors {
     pqxx::result get_avaluable_authors(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username};
-        pqxx::result result = con->execute_params("SELECT username, avatar_pic FROM get_users_by_role($1);", params);
+        pqxx::result result = con->execute_params("SELECT username, avatar_pic, display_name FROM get_users_by_role($1);", params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }

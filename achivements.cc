@@ -1,58 +1,4 @@
 #include "achivements.h"
-#include <fmt/format.h>
-#include <map>
-
-namespace {
-
-std::string row_to_achievement_json(const pqxx::row &row) {
-    std::string res_str = "{";
-    for (auto const &field : row) {
-        std::string n = field.name();
-        if (n == "dep_id" || n == "dep_name") {
-            continue;
-        }
-        res_str += '"' + n + "\": \"" + std::string(field.c_str()) + "\",";
-    }
-    if (res_str == "{") {
-        return "{}";
-    }
-    res_str[res_str.length() - 1] = '}';
-    return res_str;
-}
-
-std::string build_user_achivements_by_department_json(const std::string &username,
-                                                      const pqxx::result &result) {
-    if (result.empty()) {
-        return fmt::format("{{\"username\": \"{}\", \"achivements\": []}}", username);
-    }
-    std::map<int, std::pair<std::string, std::vector<std::string>>> by_dep;
-    for (const auto &row : result) {
-        int did = row["dep_id"].as<int>();
-        std::string dname = row["dep_name"].is_null() ? "" : row["dep_name"].c_str();
-        by_dep[did].first = dname;
-        by_dep[did].second.push_back(row_to_achievement_json(row));
-    }
-    std::string inner;
-    for (const auto &kv : by_dep) {
-        std::string ach_json = "[";
-        for (size_t i = 0; i < kv.second.second.size(); ++i) {
-            if (i) {
-                ach_json += ",";
-            }
-            ach_json += kv.second.second[i];
-        }
-        ach_json += "]";
-        inner += fmt::format(
-            "{{\"department_id\": {}, \"department\": \"{}\", \"achivements\": {}}},", kv.first,
-            kv.second.first, ach_json);
-    }
-    if (!inner.empty()) {
-        inner.pop_back();
-    }
-    return fmt::format("{{\"username\": \"{}\", \"achivements\": [{}]}}", username, inner);
-}
-
-} // namespace
 
 namespace achivements {
     pqxx::result full_user_achivements(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
@@ -190,26 +136,68 @@ namespace achivements {
         return result;
     }
 
-    pqxx::result user_achivements_with_departments(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    std::string user_achivements_by_department_json(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
 
         std::vector<std::string> params = {username};
 
         pqxx::result result = con->execute_params(
-            "SELECT ua.id, ua.username, ua.achivement_id, ua.datetime, ua.stage, "
-            "ach.achivement_pic, ach.achivement_name, ach.achivement_decsription, ach.achivement_tree, "
-            "ach.stages, ach.category, ach.category_name, ach.departmentid, "
-            "dep.departmentid as dep_id, COALESCE(dep.departmentname, '') as dep_name "
-            "FROM \"user_achivements\" ua "
-            "INNER JOIN \"achivements\" ach ON ua.achivement_id = ach.achivement_id "
-            "INNER JOIN \"department\" dep ON ach.departmentid = dep.departmentid "
-            "WHERE ua.username = ($1) "
-            "ORDER BY dep.departmentid ASC, ach.achivement_tree ASC;",
+            R"(SELECT json_build_object(
+    'username', $1::text,
+    'achivements', COALESCE(
+        (
+            SELECT json_agg(
+                json_build_object(
+                    'department_id', d.departmentid,
+                    'department', d.departmentname,
+                    'achivements', da.json_data
+                )
+                ORDER BY d.departmentid
+            )
+            FROM "department" d
+            INNER JOIN (
+                SELECT ach.departmentid,
+                       COALESCE(
+                           json_agg(
+                               json_build_object(
+                                   'id', ua.id,
+                                   'username', ua.username,
+                                   'achivement_id', ach.achivement_id,
+                                   'datetime', ua.datetime,
+                                   'stage', ua.stage,
+                                   'achivement_pic', ach.achivement_pic,
+                                   'achivement_name', ach.achivement_name,
+                                   'achivement_decsription', ach.achivement_decsription,
+                                   'achivement_tree', ach.achivement_tree,
+                                   'level', ach.level,
+                                   'stages', ach.stages,
+                                   'category', ach.category,
+                                   'category_name', ach.category_name,
+                                   'departmentid', ach.departmentid
+                               )
+                               ORDER BY ach.achivement_tree ASC, ach.level DESC NULLS LAST
+                           ),
+                           '[]'::json
+                       ) AS json_data
+                FROM "user_achivements" ua
+                INNER JOIN "achivements" ach ON ua.achivement_id = ach.achivement_id
+                WHERE ua.username = $1::text
+                  AND ach.departmentid IS NOT NULL
+                  AND ach.departmentid <> -1
+                GROUP BY ach.departmentid
+            ) da ON da.departmentid = d.departmentid
+        ),
+        '[]'::json
+    )
+)::text)",
             params);
 
         pool_ptr->returnConnection(std::move(con));
 
-        return result;
+        if (result.empty() || result[0][0].is_null()) {
+            return std::string("{\"username\":\"") + username + "\",\"achivements\":[]}";
+        }
+        return result[0][0].as<std::string>();
     }
 } // namespace achivements
 
@@ -225,14 +213,13 @@ namespace achivements::server {
                 return req->create_response(restinio::status_bad_request()).done();
             }
 
-            pqxx::result result;
+            std::string body;
             try {
-                result = achivements::user_achivements_with_departments(username, pool_ptr);
+                body = achivements::user_achivements_by_department_json(username, pool_ptr);
             } catch (...) {
                 return req->create_response(restinio::status_internal_server_error()).done();
             }
 
-            std::string body = build_user_achivements_by_department_json(username, result);
             return req->create_response().set_body(body)
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();

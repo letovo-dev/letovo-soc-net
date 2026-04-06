@@ -148,44 +148,72 @@ namespace achivements {
         (
             SELECT json_agg(
                 json_build_object(
-                    'department_id', d.departmentid,
-                    'department', d.departmentname,
-                    'achivements', da.json_data
+                    'year', x.year_val,
+                    'chapter', x.chapter_val,
+                    'department_id', x.departmentid,
+                    'department', x.departmentname,
+                    'role', x.rolename,
+                    'achivements', x.json_data
                 )
-                ORDER BY d.departmentid
+                ORDER BY x.year_val, x.chapter_val, x.departmentid
             )
-            FROM "department" d
-            INNER JOIN (
-                SELECT ach.departmentid,
-                       COALESCE(
-                           json_agg(
-                               json_build_object(
-                                   'id', ua.id,
-                                   'username', ua.username,
-                                   'achivement_id', ach.achivement_id,
-                                   'datetime', ua.datetime,
-                                   'stage', ua.stage,
-                                   'achivement_pic', ach.achivement_pic,
-                                   'achivement_name', ach.achivement_name,
-                                   'achivement_decsription', ach.achivement_decsription,
-                                   'achivement_tree', ach.achivement_tree,
-                                   'level', ach.level,
-                                   'stages', ach.stages,
-                                   'category', ach.category,
-                                   'category_name', ach.category_name,
-                                   'departmentid', ach.departmentid
-                               )
-                               ORDER BY ach.achivement_tree ASC, ach.level DESC NULLS LAST
-                           ),
-                           '[]'::json
-                       ) AS json_data
+            FROM (
+                SELECT
+                    COALESCE(EXTRACT(YEAR FROM ua.datetime)::int, 0) AS year_val,
+                    COALESCE(cal.chapter, ''::text) AS chapter_val,
+                    d.departmentid,
+                    d.departmentname,
+                    COALESCE(br.rolename, ''::text) AS rolename,
+                    COALESCE(
+                        json_agg(
+                            json_build_object(
+                                'id', ua.id,
+                                'new', COALESCE(ua."new", false),
+                                'datetime', ua.datetime,
+                                'stage', ua.stage,
+                                'achivement_pic', ach.achivement_pic,
+                                'achivement_name', ach.achivement_name,
+                                'achivement_decsription', ach.achivement_decsription,
+                                'stages', ach.stages,
+                                'category', ach.category,
+                                'category_name', ach.category_name,
+                                'departmentid', ach.departmentid
+                            )
+                            ORDER BY ach.achivement_tree ASC, ach.level DESC NULLS LAST
+                        ),
+                        '[]'::json
+                    ) AS json_data
                 FROM "user_achivements" ua
                 INNER JOIN "achivements" ach ON ua.achivement_id = ach.achivement_id
+                INNER JOIN "department" d ON d.departmentid = ach.departmentid
+                LEFT JOIN LATERAL (
+                    SELECT c.chapter
+                    FROM "calendar" c
+                    WHERE ua.datetime IS NOT NULL
+                      AND ua.datetime >= c.start
+                      AND ua.datetime <= c."end"
+                    ORDER BY c.start
+                    LIMIT 1
+                ) cal ON true
+                LEFT JOIN LATERAL (
+                    SELECT r.rolename
+                    FROM "useroles" uo
+                    INNER JOIN "roles" r ON uo.roleid = r.roleid
+                    WHERE uo.username = $1::text
+                      AND r.departmentid = ach.departmentid
+                    ORDER BY r.rang DESC NULLS LAST
+                    LIMIT 1
+                ) br ON true
                 WHERE ua.username = $1::text
                   AND ach.departmentid IS NOT NULL
                   AND ach.departmentid <> -1
-                GROUP BY ach.departmentid
-            ) da ON da.departmentid = d.departmentid
+                GROUP BY
+                    COALESCE(EXTRACT(YEAR FROM ua.datetime)::int, 0),
+                    COALESCE(cal.chapter, ''::text),
+                    d.departmentid,
+                    d.departmentname,
+                    COALESCE(br.rolename, ''::text)
+            ) x
         ),
         '[]'::json
     )

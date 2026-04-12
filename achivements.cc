@@ -6,7 +6,7 @@ namespace achivements {
 
         std::vector<std::string> params = {username};
 
-        pqxx::result result = con->execute_params("select * from \"user_achivements\" right join \"achivements\" on \"user_achivements\".achivement_id = \"achivements\".achivement_id where \"user_achivements\".username = ($1) or \"user_achivements\".username is null order by \"achivement_tree\" asc, \"level\" desc;", params);
+        pqxx::result result = con->execute_params("select *, (\"user_achivements\".username IS NOT NULL AND \"user_achivements\".stage >= \"achivements\".stages) as completed from \"user_achivements\" right join \"achivements\" on \"user_achivements\".achivement_id = \"achivements\".achivement_id where \"user_achivements\".username = ($1) or \"user_achivements\".username is null order by \"achivement_tree\" asc, \"level\" desc;", params);
 
         pool_ptr->returnConnection(std::move(con));
 
@@ -21,7 +21,7 @@ namespace achivements {
 
         std::vector<std::string> params = {username};
 
-        pqxx::result result = con->execute_params("select * from \"user_achivements\" right join \"achivements\" on \"user_achivements\".achivement_id = \"achivements\".achivement_id where \"user_achivements\".username = ($1) order by \"achivement_tree\" asc, \"level\" desc;", params);
+        pqxx::result result = con->execute_params("select *, (\"user_achivements\".stage >= \"achivements\".stages) as completed from \"user_achivements\" right join \"achivements\" on \"user_achivements\".achivement_id = \"achivements\".achivement_id where \"user_achivements\".username = ($1) order by \"achivement_tree\" asc, \"level\" desc;", params);
 
         pool_ptr->returnConnection(std::move(con));
 
@@ -126,7 +126,7 @@ namespace achivements {
 
         std::vector<std::string> params = {username, department_id};
 
-        pqxx::result result = con->execute_params("select ua.id, ua.username, ua.achivement_id, ua.datetime, ua.stage as level, ach.achivement_id, ach.achivement_pic, ach.achivement_name, ach.achivement_decsription, ach.achivement_tree, ach.stages, ach.category, ach.category_name, ach.departmentid from \"user_achivements\" ua right join \"achivements\" ach on ua.achivement_id = ach.achivement_id and ua.username = ($1) where ach.departmentid = ($2) order by \"achivement_tree\" asc--, \"level\" desc;", params);
+        pqxx::result result = con->execute_params("select ua.id, ua.username, ua.achivement_id, ua.datetime, ua.stage as level, ach.achivement_id, ach.achivement_pic, ach.achivement_name, ach.achivement_decsription, ach.achivement_tree, ach.stages, ach.category, ach.category_name, ach.departmentid, (ua.username IS NOT NULL AND ua.stage >= ach.stages) as completed from \"user_achivements\" ua right join \"achivements\" ach on ua.achivement_id = ach.achivement_id and ua.username = ($1) where ach.departmentid = ($2) order by \"achivement_tree\" asc--, \"level\" desc;", params);
 
         pool_ptr->returnConnection(std::move(con));
 
@@ -233,7 +233,8 @@ namespace achivements {
                                     'stages', ach.stages,
                                     'category', ach.category,
                                     'category_name', ach.category_name,
-                                    'departmentid', ach.departmentid
+                                    'departmentid', ach.departmentid,
+                                    'completed', ua.stage >= ach.stages
                                 )
                                 ORDER BY ach.achivement_tree ASC, ach.level DESC NULLS LAST
                             ),
@@ -284,6 +285,31 @@ namespace achivements {
         }
         return result[0][0].as<std::string>();
     }
+    std::string current_segment_day(std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+
+        pqxx::result result = con->execute(
+            R"(SELECT chapter, start, "end", (CURRENT_DATE - start::date) + 1 AS day_of_segment
+               FROM "calendar"
+               WHERE NOW() >= start AND NOW() <= "end"
+               ORDER BY start
+               LIMIT 1;)");
+
+        pool_ptr->returnConnection(std::move(con));
+
+        if (result.empty()) {
+            return "";
+        }
+
+        auto row = result[0];
+        return fmt::format(
+            R"({{"chapter":"{}","day":{},"start":"{}","end":"{}"}})",
+            row["chapter"].as<std::string>(),
+            row["day_of_segment"].as<int>(),
+            row["start"].as<std::string>(),
+            row["end"].as<std::string>()
+        );
+    }
 } // namespace achivements
 
 namespace achivements::server {
@@ -327,7 +353,7 @@ namespace achivements::server {
             if (result.empty()) {
                 return req->create_response(restinio::status_bad_gateway()).done();
             }
-            return req->create_response().set_body(cp::serialize(result))
+            return req->create_response().set_body(cp::serialize_with_segment_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });
@@ -357,7 +383,7 @@ namespace achivements::server {
                     .set_body("{}")
                     .done();
             }
-            return req->create_response().set_body(cp::serialize(result))
+            return req->create_response().set_body(cp::serialize_with_segment_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });
@@ -554,7 +580,7 @@ namespace achivements::server {
             std::string username = auth::get_username(token, pool_ptr);
             pqxx::result result = achivements::department_achivements(username, "-1", pool_ptr);
 
-            return req->create_response().set_body(cp::serialize(result))
+            return req->create_response().set_body(cp::serialize_with_segment_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });
@@ -580,7 +606,7 @@ namespace achivements::server {
 
             result = achivements::department_achivements(username, result[0]["departmentid"].as<std::string>(), pool_ptr);
 
-            return req->create_response().set_body(cp::serialize(result))
+            return req->create_response().set_body(cp::serialize_with_segment_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
             });
@@ -609,6 +635,27 @@ namespace achivements::server {
             return req->create_response()
                 .append_header(restinio::http_field::content_type, "image/png; charset=utf-8")
                 .set_body(restinio::sendfile(file_path))
+                .done();
+        });
+    }
+    void calendar_day(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_get("/calendar/day", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([] { return "called /calendar/day"; });
+
+            std::string body;
+            try {
+                body = achivements::current_segment_day(pool_ptr);
+            } catch (...) {
+                return req->create_response(restinio::status_internal_server_error()).done();
+            }
+
+            if (body.empty()) {
+                return req->create_response(restinio::status_not_found()).done();
+            }
+
+            return req->create_response()
+                .set_body(body)
+                .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });
     }

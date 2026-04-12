@@ -217,7 +217,7 @@ namespace social::server {
             }
             pqxx::result result = social::get_news((std::string)qp["start"], std::stoi((std::string)qp["size"]), username, pool_ptr);
             return req->create_response()
-                .set_body(cp::serialize(result))
+                .set_body(cp::serialize_with_segment_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });

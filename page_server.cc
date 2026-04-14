@@ -148,13 +148,13 @@ namespace page::server {
             }
 
             pqxx::result result = page::get_page_content(postid, pool_ptr);
+            if(result.empty()) {
+                return req->create_response(restinio::status_bad_gateway()).done();
+            }
+
             if (result[0]["is_secret"].as<bool>() == true || result[0]["is_published"].as<bool>() == false) {
                 logger_ptr->info( [endpoint]{return fmt::format("page request from {} is secret", endpoint);});
                 return req->create_response(restinio::status_not_found()).done();
-            }
-
-            if(result.empty()) {
-                return req->create_response(restinio::status_bad_gateway()).done();
             }
 
             return req->create_response()

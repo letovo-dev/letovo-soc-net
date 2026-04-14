@@ -144,6 +144,18 @@ namespace achivements {
         pqxx::result result = con->execute_params(
             R"(SELECT json_build_object(
     'username', $1::text,
+    'completed_count', (
+        SELECT COUNT(*) FROM "user_achivements" ua
+        INNER JOIN "achivements" ach ON ua.achivement_id = ach.achivement_id
+        WHERE ua.username = $1::text AND ua.stage >= ach.stages
+          AND ach.departmentid IS NOT NULL AND ach.departmentid <> -1
+    ),
+    'not_completed_count', (
+        SELECT COUNT(*) FROM "user_achivements" ua
+        INNER JOIN "achivements" ach ON ua.achivement_id = ach.achivement_id
+        WHERE ua.username = $1::text AND ua.stage < ach.stages
+          AND ach.departmentid IS NOT NULL AND ach.departmentid <> -1
+    ),
     'achivements', COALESCE(
         (
             SELECT json_agg(
@@ -353,7 +365,7 @@ namespace achivements::server {
             if (result.empty()) {
                 return req->create_response(restinio::status_bad_gateway()).done();
             }
-            return req->create_response().set_body(cp::serialize_with_segment_day(result, pool_ptr))
+            return req->create_response().set_body(cp::serialize_with_segment_day(result, pool_ptr, "completed"))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });
@@ -383,7 +395,7 @@ namespace achivements::server {
                     .set_body("{}")
                     .done();
             }
-            return req->create_response().set_body(cp::serialize_with_segment_day(result, pool_ptr))
+            return req->create_response().set_body(cp::serialize_with_segment_day(result, pool_ptr, "completed"))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });
@@ -572,7 +584,13 @@ namespace achivements::server {
     void no_department_achivements(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/achivements/no_dep)", [pool_ptr, logger_ptr](auto req, auto params) {
             logger_ptr->trace([]{return "called /achivements/no_dep";});
-            std::string token = req->header().get_field("Bearer");
+            std::string token;
+            try {
+                token = req->header().get_field("Bearer");
+            } catch (const std::exception &e) {
+                logger_ptr->info([]{return "can't get token";});
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
             if (token.empty()) {
                 logger_ptr->info([]{return "token is empty";});
                 return req->create_response(restinio::status_unauthorized()).done();
@@ -580,7 +598,7 @@ namespace achivements::server {
             std::string username = auth::get_username(token, pool_ptr);
             pqxx::result result = achivements::department_achivements(username, "-1", pool_ptr);
 
-            return req->create_response().set_body(cp::serialize_with_segment_day(result, pool_ptr))
+            return req->create_response().set_body(cp::serialize_with_segment_day(result, pool_ptr, "completed"))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });
@@ -591,7 +609,13 @@ namespace achivements::server {
             logger_ptr->trace([]{return "called /achivements/by_user";});
             auto qrl = req->header().path();
 
-            std::string token = req->header().get_field("Bearer");
+            std::string token;
+            try {
+                token = req->header().get_field("Bearer");
+            } catch (const std::exception &e) {
+                logger_ptr->info([]{return "can't get token";});
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
             if (token.empty()) {
                 logger_ptr->info([]{return "token is empty";});
                 return req->create_response(restinio::status_unauthorized()).done();
@@ -606,7 +630,7 @@ namespace achivements::server {
 
             result = achivements::department_achivements(username, result[0]["departmentid"].as<std::string>(), pool_ptr);
 
-            return req->create_response().set_body(cp::serialize_with_segment_day(result, pool_ptr))
+            return req->create_response().set_body(cp::serialize_with_segment_day(result, pool_ptr, "completed"))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
             });

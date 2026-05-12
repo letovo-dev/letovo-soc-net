@@ -1,4 +1,9 @@
 #include "chat.h"
+#include "chat_ws.h"
+#include "../basic/ws_event_bus.h"
+#include <rapidjson/document.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
 #include "../basic/url_parser.h"
 
 namespace chat {
@@ -14,28 +19,49 @@ namespace chat {
         return result[0]["chattable"].as<bool>();
     }
 
+    bool conversation_exists(const std::string& a, const std::string& b,
+                             std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        cp::SafeCon con{pool_ptr};
+        std::vector<std::string> params = {a, b};
+        pqxx::result result = con->execute_params(
+            "SELECT 1 FROM direct_message "
+            "WHERE ((sender = $1 AND receiver = $2) OR (sender = $2 AND receiver = $1)) "
+            "  AND deleted_at IS NULL LIMIT 1;", params);
+        return !result.empty();
+    }
+
+    // `a` is the user attempting to chat with `b`. Symmetric except for the
+    // admin shortcut (admins may message anyone). An admin-set `block` override
+    // always wins, including over an admin sender.
     bool can_chat(const std::string& a, const std::string& b,
                   std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         std::string user_a = a < b ? a : b;
         std::string user_b = a < b ? b : a;
 
-        cp::SafeCon con{pool_ptr};
-        std::vector<std::string> params = {user_a, user_b};
-        pqxx::result override_row = con->execute_params(
-            "SELECT override_type FROM chat_override "
-            "WHERE user_a = $1 AND user_b = $2;", params);
-
-        if (!override_row.empty()) {
-            std::string t = override_row[0]["override_type"].as<std::string>();
-            if (t == "allow") return true;
-            if (t == "block") return false;
+        {
+            cp::SafeCon con{pool_ptr};
+            std::vector<std::string> params = {user_a, user_b};
+            pqxx::result override_row = con->execute_params(
+                "SELECT override_type FROM chat_override "
+                "WHERE user_a = $1 AND user_b = $2;", params);
+            if (!override_row.empty()) {
+                std::string t = override_row[0]["override_type"].as<std::string>();
+                if (t == "block") return false;
+                if (t == "allow") return true;
+            }
         }
-        return is_chattable(b, pool_ptr);
+
+        if (is_chattable(b, pool_ptr)) return true;            // chat with chattable users
+        if (conversation_exists(a, b, pool_ptr)) return true;  // continue an existing dialog
+        return auth::is_rights_by_username(a, pool_ptr, "admin"); // admins can text anyone
     }
 
-    pqxx::result get_chattable_users(const std::string& current_user, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    pqxx::result get_chattable_users(const std::string& current_user, bool requester_is_admin,
+                                     std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         cp::SafeCon con{pool_ptr};
-        std::vector<std::string> params = {current_user};
+        // $2 = requester is admin: admins see every user they may chat with (i.e.
+        // everyone except `block`-overridden pairs), still sorted by recency.
+        std::vector<std::string> params = {current_user, requester_is_admin ? "true" : "false"};
         pqxx::result result = con->execute_params(
             "SELECT u.username, u.display_name, u.avatar_pic, "
             "  dm.message_text AS last_message, dm.sent_at AS last_message_time "
@@ -51,9 +77,12 @@ namespace chat {
             "  ORDER BY sent_at DESC LIMIT 1"
             ") dm ON true "
             "WHERE u.username <> $1 "
+            "  AND co.override_type IS DISTINCT FROM 'block' "
             "  AND ("
-            "       co.override_type = 'allow' "
-            "    OR (co.override_type IS NULL AND u.chattable = true) "
+            "       $2::boolean "
+            "    OR co.override_type = 'allow' "
+            "    OR u.chattable = true "
+            "    OR dm.sent_at IS NOT NULL "
             "  ) "
             "ORDER BY dm.sent_at DESC NULLS LAST, u.username;", params);
         return result;
@@ -110,6 +139,16 @@ namespace chat {
             "WHERE message_id = $1 AND deleted_at IS NULL;", params);
         if (result.empty()) return "";
         return result[0]["sender"].as<std::string>();
+    }
+
+    std::string get_message_receiver(int message_id, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        cp::SafeCon con{pool_ptr};
+        std::vector<std::string> params = {std::to_string(message_id)};
+        pqxx::result result = con->execute_params(
+            "SELECT receiver FROM direct_message WHERE message_id = $1",
+            params);
+        if (result.empty()) return "";
+        return result[0]["receiver"].as<std::string>();
     }
 
     bool delete_message(int message_id, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
@@ -179,7 +218,8 @@ namespace chat::server {
             if (username.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
-            pqxx::result result = chat::get_chattable_users(username, pool_ptr);
+            bool requester_is_admin = auth::is_admin(token, pool_ptr);
+            pqxx::result result = chat::get_chattable_users(username, requester_is_admin, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize(result))
                 .append_header("Content-Type", "application/json; charset=utf-8")
@@ -230,8 +270,9 @@ namespace chat::server {
 
     void new_message(std::unique_ptr<restinio::router::express_router_t<>>& router,
                      std::shared_ptr<cp::ConnectionsManager> pool_ptr,
-                     std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
-        router.get()->http_post("/new_message", [pool_ptr, logger_ptr](auto req, auto) {
+                     std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr,
+                     std::shared_ptr<::ws::EventBus> bus_ptr) {
+        router.get()->http_post("/new_message", [pool_ptr, logger_ptr, bus_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /new_message";});
             std::string token;
             try {
@@ -272,6 +313,32 @@ namespace chat::server {
 
             try {
                 int message_id = chat::send_message(sender, receiver, text, attachments, pool_ptr);
+
+                rapidjson::Document data(rapidjson::kObjectType);
+                auto& a = data.GetAllocator();
+                data.AddMember("message_id", message_id, a);
+                data.AddMember("sender",   rapidjson::Value(sender.c_str(),   a), a);
+                data.AddMember("receiver", rapidjson::Value(receiver.c_str(), a), a);
+                data.AddMember("text",     rapidjson::Value(text.c_str(),     a), a);
+                rapidjson::Value att_arr(rapidjson::kArrayType);
+                for (const auto& s : attachments) {
+                    att_arr.PushBack(rapidjson::Value(s.c_str(), a), a);
+                }
+                data.AddMember("attachments", att_arr, a);
+
+                if (sender == receiver) {
+                    auto inbox_topic = chat::ws::topic_inbox(receiver);
+                    bus_ptr->publish(inbox_topic,
+                        ::ws::make_envelope("chat.message.new", inbox_topic, data));
+                } else {
+                    auto inbox_topic = chat::ws::topic_inbox(receiver);
+                    auto pair_topic  = chat::ws::topic_chat_pair(sender, receiver);
+                    bus_ptr->publish(inbox_topic,
+                        ::ws::make_envelope("chat.message.new", inbox_topic, data));
+                    bus_ptr->publish(pair_topic,
+                        ::ws::make_envelope("chat.message.new", pair_topic, data));
+                }
+
                 std::string response = fmt::format(
                     R"({{"message_id": {}, "sender": "{}", "receiver": "{}", "status": "sent"}})",
                     message_id, sender, receiver);
@@ -288,8 +355,9 @@ namespace chat::server {
 
     void delete_message(std::unique_ptr<restinio::router::express_router_t<>>& router,
                         std::shared_ptr<cp::ConnectionsManager> pool_ptr,
-                        std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
-        router.get()->http_delete(R"(/chat/message/:id(\d+))", [pool_ptr, logger_ptr](auto req, auto) {
+                        std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr,
+                        std::shared_ptr<::ws::EventBus> bus_ptr) {
+        router.get()->http_delete(R"(/chat/message/:id(\d+))", [pool_ptr, logger_ptr, bus_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called DELETE /chat/message/:id";});
             std::string token;
             try {
@@ -323,6 +391,19 @@ namespace chat::server {
             bool ok = chat::delete_message(message_id, pool_ptr);
             if (!ok) {
                 return req->create_response(restinio::status_not_found()).done();
+            }
+            std::string receiver_user = chat::get_message_receiver(message_id, pool_ptr);
+            if (!sender.empty() && !receiver_user.empty() && sender != receiver_user) {
+                auto pair_topic = chat::ws::topic_chat_pair(sender, receiver_user);
+
+                rapidjson::Document data(rapidjson::kObjectType);
+                auto& a = data.GetAllocator();
+                data.AddMember("message_id", message_id, a);
+                data.AddMember("deleted_by",
+                    rapidjson::Value(caller.c_str(), a), a);
+
+                bus_ptr->publish(pair_topic,
+                    ::ws::make_envelope("chat.message.deleted", pair_topic, data));
             }
             return req->create_response()
                 .set_body(fmt::format(R"({{"message_id": {}, "status": "deleted"}})", message_id))

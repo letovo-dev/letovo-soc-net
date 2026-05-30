@@ -120,6 +120,14 @@ namespace social {
         return result;
     }
 
+    pqxx::result get_posts_by_author(std::string author, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+        auto con = std::move(pool_ptr->getConnection());
+        std::vector<std::string> params = {username, author};
+        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null and p.author = ($2) ORDER BY p.date DESC;", params);
+        pool_ptr->returnConnection(std::move(con));
+        return result;
+    }
+
     pqxx::result get_saved_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username};
@@ -312,6 +320,31 @@ namespace social::server {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             pqxx::result result = social::get_all_posts(username, pool_ptr);
+            return req->create_response()
+                .set_body(cp::serialize(result))
+                .append_header("Content-Type", "application/json; charset=utf-8")
+                .done();
+        });
+    }
+
+    void get_posts_by_author(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
+        router.get()->http_get(R"(/social/posts/author/:username([a-zA-Z0-9\-]+))", [pool_ptr, logger_ptr](auto req, auto) {
+            logger_ptr->trace([]{return "called /social/posts/author/:username";});
+            std::string token;
+            try {
+                token = req->header().get_field("Bearer");
+            } catch (const std::exception& e) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            std::string username = auth::get_username(token, pool_ptr);
+            if(username == "") {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            std::string author = url::get_last_url_arg(req->header().path());
+            if(author.empty()) {
+                return req->create_response(restinio::status_bad_request()).done();
+            }
+            pqxx::result result = social::get_posts_by_author(author, username, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize(result))
                 .append_header("Content-Type", "application/json; charset=utf-8")

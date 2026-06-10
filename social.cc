@@ -2,6 +2,34 @@
 
 namespace social {
 
+    bool is_leap_year(int year) {
+        return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    }
+
+    bool is_valid_news_date(const std::string& date) {
+        if(date.size() != 10 || date[4] != '-' || date[7] != '-') {
+            return false;
+        }
+        for(size_t i = 0; i < date.size(); ++i) {
+            if(i == 4 || i == 7) {
+                continue;
+            }
+            if(date[i] < '0' || date[i] > '9') {
+                return false;
+            }
+        }
+
+        int year = std::stoi(date.substr(0, 4));
+        int month = std::stoi(date.substr(5, 2));
+        int day = std::stoi(date.substr(8, 2));
+        if(year < 1 || month < 1 || month > 12) {
+            return false;
+        }
+
+        const int days_in_month[] = {31, is_leap_year(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+        return day >= 1 && day <= days_in_month[month - 1];
+    }
+
     pqxx::result get_authors_list(std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         pqxx::result result = con->execute("SELECT \"username\", \"avatar_pic\", \"display_name\" from \"user\" where \"author\"=true;");
@@ -9,10 +37,16 @@ namespace social {
         return result;
     }
 
-    pqxx::result get_news(std::string start, int size, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    pqxx::result get_news(std::string start, int size, std::string username, std::optional<std::string> date, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username, start, std::to_string(size)};
-        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null and p.post_path is null ORDER BY p.date DESC offset ($2) LIMIT ($3);", params);
+        std::string query = "SELECT DISTINCT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null and p.post_path is null";
+        if(date.has_value()) {
+            params.push_back(*date);
+            query += " and p.date >= ($4)::date and p.date < (($4)::date + interval '1 day')";
+        }
+        query += " ORDER BY p.date DESC offset ($2) LIMIT ($3);";
+        pqxx::result result = con->execute_params(query, params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -223,7 +257,14 @@ namespace social::server {
             if(!qp.has("start") || !qp.has("size")) {
                 return req->create_response(restinio::status_bad_request()).done();
             }
-            pqxx::result result = social::get_news((std::string)qp["start"], std::stoi((std::string)qp["size"]), username, pool_ptr);
+            std::optional<std::string> date;
+            if(qp.has("date")) {
+                date = (std::string)qp["date"];
+                if(!social::is_valid_news_date(*date)) {
+                    return req->create_response(restinio::status_bad_request()).done();
+                }
+            }
+            pqxx::result result = social::get_news((std::string)qp["start"], std::stoi((std::string)qp["size"]), username, date, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize_with_segment_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")

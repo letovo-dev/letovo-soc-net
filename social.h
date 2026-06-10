@@ -2,6 +2,7 @@
 #include <restinio/all.hpp>
 #include <pqxx/pqxx>
 #include <vector>
+#include <optional>
 #include <fmt/format.h>
 #include <rapidjson/document.h>
 #include ".././basic/pqxx_cp.h"
@@ -19,7 +20,7 @@
 namespace social {
     pqxx::result get_authors_list(std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
-    pqxx::result get_news(std::string start, int size, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+    pqxx::result get_news(std::string start, int size, std::string username, std::optional<std::string> date, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
     pqxx::result get_all_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 

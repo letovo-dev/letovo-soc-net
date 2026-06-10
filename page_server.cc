@@ -158,7 +158,7 @@ namespace page::server {
             }
 
             return req->create_response()
-                .set_body(cp::serialize(result))
+                .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
             
@@ -270,7 +270,7 @@ namespace page::server {
 
             return req->create_response(restinio::status_ok())
                 .append_header("Content-Type", "application/json; charset=utf-8")
-                .set_body(cp::serialize(page::get_page_content(post_id, pool_ptr)))
+                .set_body(cp::serialize_with_shift_day(page::get_page_content(post_id, pool_ptr), pool_ptr))
                 .done();
 
         });
@@ -526,7 +526,7 @@ namespace page::server {
 
             return req->create_response(restinio::status_ok())
                 .append_header("Content-Type", "application/json; charset=utf-8")
-                .set_body(cp::serialize(social::get_post(new_body["post_id"].GetString(), auth::get_username(token, pool_ptr), pool_ptr)))
+                .set_body(cp::serialize_with_shift_day(social::get_post(new_body["post_id"].GetString(), auth::get_username(token, pool_ptr), pool_ptr), pool_ptr))
                 .done();
         });
     }

@@ -262,7 +262,7 @@ namespace chat::server {
 
             pqxx::result result = chat::get_messages(current_user, target_user, limit, offset, pool_ptr);
             return req->create_response()
-                .set_body(cp::serialize(result))
+                .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });

@@ -250,7 +250,7 @@ namespace social::server {
             }
             pqxx::result result = social::get_comments((std::string)qp["post_id"], (std::string)qp["start"], std::stoi((std::string)qp["size"]), username, pool_ptr);
             return req->create_response()
-                .set_body(cp::serialize(result))
+                .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });
@@ -300,7 +300,7 @@ namespace social::server {
             logger_ptr->info([post_id] { return fmt::format("get post request for {}", post_id); });
             pqxx::result result = social::get_post(post_id, username, pool_ptr);
             return req->create_response()
-                .set_body(cp::serialize(result))
+                .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });
@@ -321,7 +321,7 @@ namespace social::server {
             }
             pqxx::result result = social::get_all_posts(username, pool_ptr);
             return req->create_response()
-                .set_body(cp::serialize(result))
+                .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });
@@ -346,7 +346,7 @@ namespace social::server {
             }
             pqxx::result result = social::get_posts_by_author(author, username, pool_ptr);
             return req->create_response()
-                .set_body(cp::serialize(result))
+                .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });
@@ -388,7 +388,7 @@ namespace social::server {
             }
             pqxx::result result = social::get_saved_posts(username, pool_ptr);
             return req->create_response()
-                .set_body(cp::serialize(result))
+                .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });
@@ -457,7 +457,7 @@ namespace social::server {
             }
             pqxx::result result = social::get_post("111", username, pool_ptr);
             return req->create_response()
-                .set_body(cp::serialize(result))
+                .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });
@@ -599,7 +599,7 @@ namespace social::server {
                 int post_id = social::add_comment(comment, new_body["post_id"].GetString(), username, pool_ptr);
                 pqxx::result result = social::get_post(std::to_string(post_id), username, pool_ptr);
                 return req->create_response()
-                    .set_body(cp::serialize(result))
+                    .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                     .append_header("Content-Type", "application/json; charset=utf-8")
                     .done();
             } catch(const std::exception& e) {
@@ -646,7 +646,7 @@ namespace social::server {
             if (result.empty()) {
                 return req->create_response(restinio::status_bad_gateway()).done();
             }
-            return req->create_response().set_body(cp::serialize(result))
+            return req->create_response().set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
                 .done();
         });

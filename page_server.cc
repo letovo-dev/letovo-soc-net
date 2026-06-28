@@ -510,8 +510,8 @@ namespace page::server {
                     title,
                     author,
                     text,
-                    new_body.HasMember("category_name") ? new_body["category_name"].GetString() : old_post[0]["category_name"].as<std::string>(),
-                    new_body.HasMember("post_path") ? new_body["post_path"].GetString() : old_post[0]["post_path"].as<std::string>(),
+                    new_body.HasMember("category_name") && new_body["category_name"].IsString() ? new_body["category_name"].GetString() : old_post[0]["category_name"].as<std::string>(),
+                    new_body.HasMember("post_path") && new_body["post_path"].IsString() ? new_body["post_path"].GetString() : (old_post[0]["post_path"].is_null() ? "" : old_post[0]["post_path"].as<std::string>()),
                     pool_ptr, logger_ptr
                 );
             } catch (const std::exception& e) {

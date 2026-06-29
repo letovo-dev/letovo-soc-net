@@ -73,7 +73,7 @@ namespace social {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {post_id};
         pqxx::result result;
-        std::string query = "SELECT post_media.* FROM \"post_media\" left join \"posts\" p on post_media.post_id = p.post_id WHERE \"post_media\".post_id=($1) and \"post_media\".is_secret=false";
+        std::string query = "SELECT post_media.* FROM \"post_media\" left join \"posts\" p on post_media.post_id = p.post_id::text WHERE \"post_media\".post_id=($1) and \"post_media\".is_secret=false";
         if(!include_secret) {
             query += " and COALESCE(p.is_secret, false) = false";
         }
@@ -716,10 +716,7 @@ namespace social::server {
             }
             const std::string token = security::bearer_or_cookie_token(req->header());
             const std::string actor = security::username_from_session(token, pool_ptr);
-            if (actor.empty()) {
-                return req->create_response(restinio::status_unauthorized()).done();
-            }
-            const bool can_read_secret = security::can_read_secret_posts(actor, pool_ptr);
+            const bool can_read_secret = !actor.empty() && security::can_read_secret_posts(actor, pool_ptr);
             if (category == "5" && !can_read_secret) {
                 return req->create_response(restinio::status_forbidden()).done();
             }

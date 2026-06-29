@@ -208,10 +208,8 @@ namespace chat::server {
                    std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get("/chats/", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /chats/";});
-            std::string token;
-            try {
-                token = req->header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string username = auth::get_username(token, pool_ptr);
@@ -232,10 +230,8 @@ namespace chat::server {
                   std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/chat/:username([a-zA-Z0-9\-_]+))", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /chat/:username";});
-            std::string token;
-            try {
-                token = req->header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string current_user = auth::get_username(token, pool_ptr);
@@ -274,10 +270,8 @@ namespace chat::server {
                      std::shared_ptr<::ws::EventBus> bus_ptr) {
         router.get()->http_post("/new_message", [pool_ptr, logger_ptr, bus_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /new_message";});
-            std::string token;
-            try {
-                token = req->header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string sender = auth::get_username(token, pool_ptr);
@@ -359,10 +353,8 @@ namespace chat::server {
                         std::shared_ptr<::ws::EventBus> bus_ptr) {
         router.get()->http_delete(R"(/chat/message/:id(\d+))", [pool_ptr, logger_ptr, bus_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called DELETE /chat/message/:id";});
-            std::string token;
-            try {
-                token = req->header().get_field("Bearer");
-            } catch (const std::exception&) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string caller = auth::get_username(token, pool_ptr);
@@ -417,10 +409,8 @@ namespace chat::server {
                         std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_post("/chat/permission", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called POST /chat/permission";});
-            std::string token;
-            try {
-                token = req->header().get_field("Bearer");
-            } catch (const std::exception&) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             if (auth::get_username(token, pool_ptr).empty()) {
@@ -470,10 +460,8 @@ namespace chat::server {
                           std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_delete("/chat/permission", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called DELETE /chat/permission";});
-            std::string token;
-            try {
-                token = req->header().get_field("Bearer");
-            } catch (const std::exception&) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             if (auth::get_username(token, pool_ptr).empty()) {

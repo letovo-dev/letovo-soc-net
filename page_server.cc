@@ -199,11 +199,9 @@ namespace page::server {
     void add_page(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_post("/post/add_page", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /post/add_page";});
-            std::string token;
-            try {
-                token = req->header().get_field("Bearer");
-            } catch (const std::exception& e) {
-                logger_ptr->error( [e]{return fmt::format("error getting Bearer: {}", e.what());});
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
+                logger_ptr->info( []{return "token is empty";});
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             if (token.empty()) {
@@ -308,10 +306,8 @@ namespace page::server {
     void get_favourite_posts(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get("/post/favourite/", [pool_ptr, logger_ptr](auto req, auto params) {
             logger_ptr->trace([]{return "called /post/favourite/";});
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_non_authoritative_information()).done();
             }
             std::string username = auth::get_username(token, pool_ptr);
@@ -342,10 +338,8 @@ namespace page::server {
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
 
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             if (token.empty()) {
@@ -379,10 +373,8 @@ namespace page::server {
         router.get()->http_delete(R"(/post/favourite/:id(\d+))", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /post/favourite/:id";});
             std::vector<std::string> url_parts = url::spilt_url_path(req->header().path(), "/");
-            std::string token;
-            try {
-                token = req->header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             int post_id = std::stoi(url::get_last_url_arg(req->header().path()));
@@ -409,10 +401,8 @@ namespace page::server {
     void rename_category(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_put("/post/rename_category", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /post/rename_category";});
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             if (token.empty()) {
@@ -436,10 +426,8 @@ namespace page::server {
     void delete_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_delete("/post/delete", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /post/delete";});
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             if (token.empty()) {
@@ -468,10 +456,8 @@ namespace page::server {
     void update_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_put("/post/update", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /post/update";});
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             if (token.empty()) {
@@ -546,10 +532,8 @@ namespace page::server {
     void add_media(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_post("/post/add_media", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /post/add_media";});
-            std::string token;
-            try {
-                token = req->header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             if (token.empty()) {
@@ -579,10 +563,8 @@ namespace page::server {
     void delete_media(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_delete("/post/delete_media", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /post/delete_media";});
-            std::string token;
-            try {
-                token = req->header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             if (token.empty()) {

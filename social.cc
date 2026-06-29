@@ -37,10 +37,13 @@ namespace social {
         return result;
     }
 
-    pqxx::result get_news(std::string start, int size, std::string username, std::optional<std::string> date, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    pqxx::result get_news(std::string start, int size, std::string username, std::optional<std::string> date, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username, start, std::to_string(size)};
         std::string query = "SELECT DISTINCT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null and p.post_path is null";
+        if(!include_secret) {
+            query += " and p.is_secret = false";
+        }
         if(date.has_value()) {
             params.push_back(*date);
             query += " and p.date >= ($4)::date and p.date < (($4)::date + interval '1 day')";
@@ -51,21 +54,31 @@ namespace social {
         return result;
     }
 
-    pqxx::result get_comments(std::string post_id, std::string start, int size, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    pqxx::result get_comments(std::string post_id, std::string start, int size, std::string username, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         // std::vector<std::string> params = {username, post_id, start, std::to_string(size)};
         std::vector<std::string> params = {username, start, std::to_string(size), post_id};
         // pqxx::result result = con->execute_params("SELECT p.*, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id where p.parent_id is not null and p.parent_id = ($2) ORDER BY p.post_id DESC offset ($3) LIMIT ($4);", params);
-        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id = ($4) and p.post_path is null ORDER BY p.date DESC offset ($2) LIMIT ($3);", params);
+        std::string query = "SELECT DISTINCT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"posts\" parent on p.parent_id = parent.post_id left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id = ($4) and p.post_path is null";
+        if(!include_secret) {
+            query += " and p.is_secret = false and COALESCE(parent.is_secret, false) = false";
+        }
+        query += " ORDER BY p.date DESC offset ($2) LIMIT ($3);";
+        pqxx::result result = con->execute_params(query, params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
 
-    pqxx::result get_post_media(std::string post_id, bool pics, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    pqxx::result get_post_media(std::string post_id, bool pics, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {post_id};
         pqxx::result result;
-        result = con->execute_params("SELECT * FROM \"post_media\" WHERE \"post_media\".post_id=($1) and \"post_media\".is_secret=false;", params);
+        std::string query = "SELECT post_media.* FROM \"post_media\" left join \"posts\" p on post_media.post_id = p.post_id WHERE \"post_media\".post_id=($1) and \"post_media\".is_secret=false";
+        if(!include_secret) {
+            query += " and COALESCE(p.is_secret, false) = false";
+        }
+        query += ";";
+        result = con->execute_params(query, params);
         
         pool_ptr->returnConnection(std::move(con));
         return result;
@@ -119,33 +132,53 @@ namespace social {
         return result[0]["post_id"].as<int>();
     }
 
-    pqxx::result get_all_titles(std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    pqxx::result get_all_titles(bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
-        pqxx::result result = con->execute("SELECT post_id, title FROM \"posts\" where \"posts\".post_path is null and \"posts\".parent_id is null;");
+        std::string query = "SELECT post_id, title FROM \"posts\" where \"posts\".post_path is null and \"posts\".parent_id is null";
+        if(!include_secret) {
+            query += " and \"posts\".is_secret = false";
+        }
+        query += ";";
+        pqxx::result result = con->execute(query);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
 
-    pqxx::result get_all_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    pqxx::result get_all_posts(std::string username, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username};
-        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null and p.post_path is not null ORDER BY p.date;", params);
+        std::string query = "SELECT DISTINCT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null and p.post_path is not null";
+        if(!include_secret) {
+            query += " and p.is_secret = false";
+        }
+        query += " ORDER BY p.date;";
+        pqxx::result result = con->execute_params(query, params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
 
-    pqxx::result get_posts_by_author(std::string author, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    pqxx::result get_posts_by_author(std::string author, std::string username, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username, author};
-        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null and p.author = ($2) ORDER BY p.date DESC;", params);
+        std::string query = "SELECT DISTINCT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = $1 left join \"user_saved\" s on p.post_id = s.post_id and s.username = $1 left join \"user\" u on p.author = u.username WHERE p.parent_id is null and p.author = ($2)";
+        if(!include_secret) {
+            query += " and p.is_secret = false";
+        }
+        query += " ORDER BY p.date DESC;";
+        pqxx::result result = con->execute_params(query, params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
 
-    pqxx::result get_saved_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    pqxx::result get_saved_posts(std::string username, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username};
-        pqxx::result result = con->execute_params("SELECT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = ($1) left join \"user_saved\" s on p.post_id = s.post_id and s.username = ($1) left join \"user\" u on p.author = u.username WHERE s.username=($1);", params);
+        std::string query = "SELECT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = ($1) left join \"user_saved\" s on p.post_id = s.post_id and s.username = ($1) left join \"user\" u on p.author = u.username WHERE s.username=($1)";
+        if(!include_secret) {
+            query += " and p.is_secret = false";
+        }
+        query += ";";
+        pqxx::result result = con->execute_params(query, params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -168,10 +201,14 @@ namespace social {
         pool_ptr->returnConnection(std::move(con));
     }
 
-    pqxx::result get_post(std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    pqxx::result get_post(std::string post_id, std::string username, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {username, post_id};
-        pqxx::result result = con->execute_params("SELECT DISTINCT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = ($1) left join \"user_saved\" s on p.post_id = s.post_id and s.username = ($1) left join \"user\" u on p.author = u.username WHERE p.post_id = ($2)", params);
+        std::string query = "SELECT DISTINCT p.*, u.avatar_pic, u.display_name, case when l.username = ($1) and l.value = 1 then true else false end as is_liked, case when l.username = ($1) and l.value = -1 then true else false end as is_disliked, case when s.username is not null then true else false end as saved from \"posts\" p left join \"user_likes\" l on l.post_id = p.post_id AND l.username = ($1) left join \"user_saved\" s on p.post_id = s.post_id and s.username = ($1) left join \"user\" u on p.author = u.username WHERE p.post_id = ($2)";
+        if(!include_secret) {
+            query += " and p.is_secret = false";
+        }
+        pqxx::result result = con->execute_params(query, params);
         pool_ptr->returnConnection(std::move(con));
         return result;
     }
@@ -250,7 +287,8 @@ namespace social::server {
                     return req->create_response(restinio::status_bad_request()).done();
                 }
             }
-            pqxx::result result = social::get_news((std::string)qp["start"], std::stoi((std::string)qp["size"]), username, date, pool_ptr);
+            const bool can_read_secret = security::can_read_secret_posts(username, pool_ptr);
+            pqxx::result result = social::get_news((std::string)qp["start"], std::stoi((std::string)qp["size"]), username, date, can_read_secret, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize_with_segment_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
@@ -275,7 +313,8 @@ namespace social::server {
             if(!qp.has("post_id") || !qp.has("start") || !qp.has("size")) {
                 return req->create_response(restinio::status_bad_request()).done();
             }
-            pqxx::result result = social::get_comments((std::string)qp["post_id"], (std::string)qp["start"], std::stoi((std::string)qp["size"]), username, pool_ptr);
+            const bool can_read_secret = security::can_read_secret_posts(username, pool_ptr);
+            pqxx::result result = social::get_comments((std::string)qp["post_id"], (std::string)qp["start"], std::stoi((std::string)qp["size"]), username, can_read_secret, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
@@ -288,7 +327,10 @@ namespace social::server {
             logger_ptr->trace([]{return "called /social/media/pics/:post_id";});
             std::string post_id = url::get_last_url_arg(req->header().path());
             bool pics = true; //req->header().get_field("pics") == "true";
-            pqxx::result result = social::get_post_media(post_id, pics, pool_ptr);
+            std::string token = security::bearer_or_cookie_token(req->header());
+            std::string username = security::username_from_session(token, pool_ptr);
+            const bool can_read_secret = security::can_read_secret_posts(username, pool_ptr);
+            pqxx::result result = social::get_post_media(post_id, pics, can_read_secret, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize(result))
                 .append_header("Content-Type", "application/json; charset=utf-8")
@@ -301,7 +343,10 @@ namespace social::server {
             logger_ptr->trace([]{return "called /social/media/pics/:post_id";});
             std::string post_id = url::get_last_url_arg(req->header().path());
             bool pics = false; //req->header().get_field("pics") == "true";
-            pqxx::result result = social::get_post_media(post_id, pics, pool_ptr);
+            std::string token = security::bearer_or_cookie_token(req->header());
+            std::string username = security::username_from_session(token, pool_ptr);
+            const bool can_read_secret = security::can_read_secret_posts(username, pool_ptr);
+            pqxx::result result = social::get_post_media(post_id, pics, can_read_secret, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize(result))
                 .append_header("Content-Type", "application/json; charset=utf-8")
@@ -325,7 +370,8 @@ namespace social::server {
             logger_ptr->info([username] { return fmt::format("user {} get post request", username); });
             std::string post_id = url::get_last_url_arg(req->header().path());
             logger_ptr->info([post_id] { return fmt::format("get post request for {}", post_id); });
-            pqxx::result result = social::get_post(post_id, username, pool_ptr);
+            const bool can_read_secret = security::can_read_secret_posts(username, pool_ptr);
+            pqxx::result result = social::get_post(post_id, username, can_read_secret, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
@@ -346,7 +392,8 @@ namespace social::server {
             if(username == "") {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
-            pqxx::result result = social::get_all_posts(username, pool_ptr);
+            const bool can_read_secret = security::can_read_secret_posts(username, pool_ptr);
+            pqxx::result result = social::get_all_posts(username, can_read_secret, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
@@ -371,7 +418,8 @@ namespace social::server {
             if(author.empty()) {
                 return req->create_response(restinio::status_bad_request()).done();
             }
-            pqxx::result result = social::get_posts_by_author(author, username, pool_ptr);
+            const bool can_read_secret = security::can_read_secret_posts(username, pool_ptr);
+            pqxx::result result = social::get_posts_by_author(author, username, can_read_secret, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
@@ -392,7 +440,8 @@ namespace social::server {
             if(username == "") {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
-            pqxx::result result = social::get_all_titles(pool_ptr);
+            const bool can_read_secret = security::can_read_secret_posts(username, pool_ptr);
+            pqxx::result result = social::get_all_titles(can_read_secret, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize(result))
                 .append_header("Content-Type", "application/json; charset=utf-8")
@@ -413,7 +462,8 @@ namespace social::server {
             if(username == "") {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
-            pqxx::result result = social::get_saved_posts(username, pool_ptr);
+            const bool can_read_secret = security::can_read_secret_posts(username, pool_ptr);
+            pqxx::result result = social::get_saved_posts(username, can_read_secret, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
@@ -482,7 +532,8 @@ namespace social::server {
             if(!qp.has("title")) {
                 return req->create_response(restinio::status_bad_request()).done();
             }
-            pqxx::result result = social::get_post("111", username, pool_ptr);
+            const bool can_read_secret = security::can_read_secret_posts(username, pool_ptr);
+            pqxx::result result = social::get_post("111", username, can_read_secret, pool_ptr);
             return req->create_response()
                 .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                 .append_header("Content-Type", "application/json; charset=utf-8")
@@ -624,7 +675,8 @@ namespace social::server {
                 std::string comment = new_body["comment"].GetString();
                 assist::fix_new_lines(comment);
                 int post_id = social::add_comment(comment, new_body["post_id"].GetString(), username, pool_ptr);
-                pqxx::result result = social::get_post(std::to_string(post_id), username, pool_ptr);
+                const bool can_read_secret = security::can_read_secret_posts(username, pool_ptr);
+                pqxx::result result = social::get_post(std::to_string(post_id), username, can_read_secret, pool_ptr);
                 return req->create_response()
                     .set_body(cp::serialize_with_shift_day(result, pool_ptr))
                     .append_header("Content-Type", "application/json; charset=utf-8")

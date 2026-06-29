@@ -132,6 +132,11 @@ namespace page {
         con->execute_params("UPDATE \"posts\" SET \"is_secret\"=false WHERE \"post_id\"=($1);", params, true);
         pool_ptr->returnConnection(std::move(con));
     }
+
+    std::string reveal_secret_url(const std::string& token) {
+        return fmt::format("https://{}/api/post/reveal_secret/{}",
+            Config::giveMe().server_config.adress, token);
+    }
 }
 
 
@@ -527,7 +532,13 @@ namespace page::server {
 
             return req->create_response(restinio::status_ok())
                 .append_header("Content-Type", "application/json; charset=utf-8")
-                .set_body(cp::serialize_with_shift_day(social::get_post(new_body["post_id"].GetString(), auth::get_username(token, pool_ptr), pool_ptr), pool_ptr))
+                .set_body(cp::serialize_with_shift_day(
+                    social::get_post(
+                        new_body["post_id"].GetString(),
+                        auth::get_username(token, pool_ptr),
+                        security::can_read_secret_posts(auth::get_username(token, pool_ptr), pool_ptr),
+                        pool_ptr),
+                    pool_ptr))
                 .done();
         });
     }
@@ -599,22 +610,40 @@ namespace page::server {
     }
 
     void reveal_secret_page(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
-        router.get()->http_get(R"(/post/reveal_secret/:id(\d+))", [pool_ptr, logger_ptr](auto req, auto params) {
-            logger_ptr->trace([]{return "called /post/reveal_secret/:id";});
+        router.get()->http_get(R"(/post/reveal_secret_link/:id(\d+))", [pool_ptr, logger_ptr](auto req, auto params) {
+            logger_ptr->trace([]{return "called /post/reveal_secret_link/:id";});
             int post_id = url::last_int_from_url_path(req->header().path());
             if (post_id <= 0) {
                 return req->create_response(restinio::status_bad_request()).done();
             }
             const std::string token = security::bearer_or_cookie_token(req->header());
-            const std::string actor = security::username_from_session(token, pool_ptr);
-            if (actor.empty()) {
+            const std::string actor = auth::get_username(token, pool_ptr);
+            if (actor.empty() || !auth::is_admin(token, pool_ptr)) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
-            if (!security::can_read_secret_posts(actor, pool_ptr)) {
+            try {
+                const std::string reveal_token = security::create_post_reveal_token(post_id, actor, pool_ptr);
+                return req->create_response(restinio::status_ok())
+                    .append_header("Content-Type", "application/json; charset=utf-8")
+                    .set_body(fmt::format(R"({{"post_id":{},"reveal_url":"{}"}})", post_id, page::reveal_secret_url(reveal_token)))
+                    .done();
+            } catch (const std::exception& e) {
+                logger_ptr->error([e] { return fmt::format("Error: {}", e.what()); });
+                return req->create_response(restinio::status_internal_server_error()).done();
+            }
+        });
+
+        router.get()->http_get(R"(/post/reveal_secret/:token([a-fA-F0-9]+))", [pool_ptr, logger_ptr](auto req, auto params) {
+            logger_ptr->trace([]{return "called /post/reveal_secret/:token";});
+            std::string token = url::get_last_url_arg(req->header().path());
+            if (token.size() != 64) {
+                return req->create_response(restinio::status_bad_request()).done();
+            }
+            std::optional<int> post_id = security::post_id_from_reveal_token(token, pool_ptr);
+            if (!post_id.has_value()) {
                 return req->create_response(restinio::status_forbidden()).done();
             }
-
-            page::reveal_secret_page(post_id, pool_ptr);
+            page::reveal_secret_page(*post_id, pool_ptr);
             return req->create_response(restinio::status_ok())
                 .append_header("Content-Type", "text/plain; charset=utf-8")
                 .set_body(Comment::giveMe().reveal_secret)

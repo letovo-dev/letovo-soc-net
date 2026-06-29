@@ -190,12 +190,18 @@ namespace social {
         return result;
     }
 
-    pqxx::result get_post_by_category(std::string category, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
+    pqxx::result get_post_by_category(std::string category, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
         auto con = std::move(pool_ptr->getConnection());
 
         std::vector<std::string> params = {category};
 
-        pqxx::result result = con->execute_params("select p.*, pc.category_name from \"posts\" p left join \"post_category\" pc on p.category = pc.category_id where p.category = ($1) AND p.post_path is not null;", params);
+        std::string query = "select p.*, pc.category_name from \"posts\" p left join \"post_category\" pc on p.category = pc.category_id where p.category = ($1) AND p.post_path is not null";
+        if (!include_secret) {
+            query += " AND p.is_secret = false";
+        }
+        query += ";";
+
+        pqxx::result result = con->execute_params(query, params);
 
         pool_ptr->returnConnection(std::move(con));
 
@@ -656,9 +662,18 @@ namespace social::server {
             if (category == "category" || category.empty()) {
                 return req->create_response(restinio::status_bad_request()).done();
             }
+            const std::string token = security::bearer_or_cookie_token(req->header());
+            const std::string actor = security::username_from_session(token, pool_ptr);
+            if (actor.empty()) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            const bool can_read_secret = security::can_read_secret_posts(actor, pool_ptr);
+            if (category == "5" && !can_read_secret) {
+                return req->create_response(restinio::status_forbidden()).done();
+            }
             pqxx::result result;
             try {
-                result = social::get_post_by_category(category, pool_ptr);
+                result = social::get_post_by_category(category, can_read_secret, pool_ptr);
             } catch (const std::exception& e) {
                 logger_ptr->error([e] { return fmt::format("Error: {}", e.what()); });
                 return req->create_response(restinio::status_internal_server_error()).done();

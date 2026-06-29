@@ -14,6 +14,7 @@
 #include "../basic/url_parser.h"
 #include "../basic/auth.h"
 #include "../basic/media.h"
+#include "../basic/security.h"
 #include "../basic/config.h"
 #include "../basic/assist_funcs.h"
 
@@ -48,7 +49,7 @@ namespace social {
 
     pqxx::result get_post_categories(std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
-    pqxx::result get_post_by_category(std::string category, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+    pqxx::result get_post_by_category(std::string category, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 }
 
 namespace social::server {

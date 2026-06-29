@@ -1,4 +1,5 @@
 #include "page_server.h"
+#include "../basic/security.h"
 
 namespace page {
 
@@ -603,6 +604,14 @@ namespace page::server {
             int post_id = url::last_int_from_url_path(req->header().path());
             if (post_id <= 0) {
                 return req->create_response(restinio::status_bad_request()).done();
+            }
+            const std::string token = security::bearer_or_cookie_token(req->header());
+            const std::string actor = security::username_from_session(token, pool_ptr);
+            if (actor.empty()) {
+                return req->create_response(restinio::status_unauthorized()).done();
+            }
+            if (!security::can_read_secret_posts(actor, pool_ptr)) {
+                return req->create_response(restinio::status_forbidden()).done();
             }
 
             page::reveal_secret_page(post_id, pool_ptr);

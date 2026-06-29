@@ -297,10 +297,8 @@ namespace social::server {
     void get_comments(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/social/comments:search(.*))", [pool_ptr, logger_ptr](auto req, auto) {            
             logger_ptr->trace([]{return "called /social/comments";});
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string username = auth::get_username(token, pool_ptr);
@@ -355,10 +353,8 @@ namespace social::server {
     void get_post(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/social/new/:post_id(.*))", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /social/new/:post_id";});
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string username = auth::get_username(token, pool_ptr);
@@ -380,10 +376,8 @@ namespace social::server {
     void get_all_posts(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get("/social/posts", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /social/posts";});
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string username = auth::get_username(token, pool_ptr);
@@ -469,10 +463,8 @@ namespace social::server {
             logger_ptr->trace([]{return "called /social/save";});
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string username = auth::get_username(token, pool_ptr);
@@ -491,10 +483,8 @@ namespace social::server {
             logger_ptr->trace([]{return "called /social/save";});
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string username = auth::get_username(token, pool_ptr);
@@ -512,10 +502,8 @@ namespace social::server {
     void search_by_title(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/social/search:search(.*))", [pool_ptr, logger_ptr](auto req, auto) {
             logger_ptr->trace([]{return "called /social/search";});
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string username = auth::get_username(token, pool_ptr);
@@ -540,10 +528,8 @@ namespace social::server {
             logger_ptr->trace([]{return "called /social/like";});
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string username = auth::get_username(token, pool_ptr);
@@ -567,10 +553,8 @@ namespace social::server {
             logger_ptr->trace([]{return "called /social/dislike";});
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string username = auth::get_username(token, pool_ptr);
@@ -595,10 +579,8 @@ namespace social::server {
             logger_ptr->trace([]{return "called /social/like";});
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string username = auth::get_username(token, pool_ptr);
@@ -622,10 +604,8 @@ namespace social::server {
             logger_ptr->trace([]{return "called /social/dislike";});
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string username = auth::get_username(token, pool_ptr);
@@ -649,10 +629,8 @@ namespace social::server {
             logger_ptr->trace([]{return "called /social/comments";});
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             std::string username = auth::get_username(token, pool_ptr);

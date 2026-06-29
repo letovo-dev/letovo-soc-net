@@ -14,27 +14,28 @@
 #include "../basic/url_parser.h"
 #include "../basic/auth.h"
 #include "../basic/media.h"
+#include "../basic/security.h"
 #include "../basic/config.h"
 #include "../basic/assist_funcs.h"
 
 namespace social {
     pqxx::result get_authors_list(std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
-    pqxx::result get_news(std::string start, int size, std::string username, std::optional<std::string> date, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+    pqxx::result get_news(std::string start, int size, std::string username, std::optional<std::string> date, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
-    pqxx::result get_all_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+    pqxx::result get_all_posts(std::string username, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
-    pqxx::result get_comments(std::string post_id, std::string start, int size, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+    pqxx::result get_comments(std::string post_id, std::string start, int size, std::string username, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
         
-    pqxx::result get_post_media(std::string post_id, bool pics, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+    pqxx::result get_post_media(std::string post_id, bool pics, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
-    pqxx::result get_all_titles(std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+    pqxx::result get_all_titles(bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
-    pqxx::result get_post(std::string post_id, std::string usenrame, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+    pqxx::result get_post(std::string post_id, std::string usenrame, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
-    pqxx::result get_posts_by_author(std::string author, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+    pqxx::result get_posts_by_author(std::string author, std::string username, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
-    pqxx::result get_saved_posts(std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+    pqxx::result get_saved_posts(std::string username, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
     void add_like(int like, std::string post_id, std::string username, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
@@ -48,7 +49,7 @@ namespace social {
 
     pqxx::result get_post_categories(std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 
-    pqxx::result get_post_by_category(std::string category, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+    pqxx::result get_post_by_category(std::string category, bool include_secret, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
 }
 
 namespace social::server {

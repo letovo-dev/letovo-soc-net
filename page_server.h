@@ -47,6 +47,8 @@ namespace page {
     void med_to_vec(const rapidjson::Document& new_body, std::vector<std::string>& out_media);
 
     void reveal_secret_page(int post_id, std::shared_ptr<cp::ConnectionsManager> pool_ptr);
+
+    std::string reveal_secret_url(const std::string& token);
 }
 
 namespace page::server {

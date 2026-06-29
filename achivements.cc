@@ -411,11 +411,8 @@ namespace achivements::server {
                 return req->create_response(restinio::status_non_authoritative_information()).done();
             }
 
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
-                logger_ptr->info([]{return "can't get token";});
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
 
@@ -446,11 +443,8 @@ namespace achivements::server {
                 return req->create_response(restinio::status_non_authoritative_information()).done();
             }
 
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
-                logger_ptr->info([]{return "can't get token";});
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
 
@@ -525,11 +519,8 @@ namespace achivements::server {
             rapidjson::Document new_body;
             new_body.Parse(req->body().c_str());
 
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
-                logger_ptr->info([]{return "can't get token";});
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
 
@@ -584,11 +575,8 @@ namespace achivements::server {
     void no_department_achivements(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get(R"(/achivements/no_dep)", [pool_ptr, logger_ptr](auto req, auto params) {
             logger_ptr->trace([]{return "called /achivements/no_dep";});
-            std::string token;
-            try {
-                token = req->header().get_field("Bearer");
-            } catch (const std::exception &e) {
-                logger_ptr->info([]{return "can't get token";});
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             if (token.empty()) {
@@ -609,11 +597,8 @@ namespace achivements::server {
             logger_ptr->trace([]{return "called /achivements/by_user";});
             auto qrl = req->header().path();
 
-            std::string token;
-            try {
-                token = req->header().get_field("Bearer");
-            } catch (const std::exception &e) {
-                logger_ptr->info([]{return "can't get token";});
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
             if (token.empty()) {

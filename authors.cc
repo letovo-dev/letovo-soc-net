@@ -26,11 +26,8 @@ namespace authors::server {
 
     void get_avaluable_authors(std::unique_ptr<restinio::router::express_router_t<>>& router, std::shared_ptr<cp::ConnectionsManager> pool_ptr, std::shared_ptr<restinio::shared_ostream_logger_t> logger_ptr) {
         router.get()->http_get("/authors_list", [pool_ptr, logger_ptr](auto req, auto) {
-            std::string token;
-            try {
-                token = req -> header().get_field("Bearer");
-            } catch (const std::exception& e) {
-                logger_ptr->info([]{return "can't get token";});
+            std::string token = security::bearer_or_cookie_token(req->header());
+            if(token.empty()) {
                 return req->create_response(restinio::status_unauthorized()).done();
             }
 

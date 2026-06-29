@@ -1,6 +1,54 @@
 #include "page_server.h"
 #include "../basic/security.h"
 
+namespace {
+
+    void normalize_article_categories(std::unique_ptr<cp::AsyncConnection>& con) {
+        con->execute(R"SQL(
+            UPDATE "posts"
+            SET "post_path" = NULL
+            WHERE "post_path" = '';
+
+            WITH article_categories AS (
+                SELECT DISTINCT btrim("category_name") AS "category_name"
+                FROM "posts"
+                WHERE "post_path" IS NOT NULL
+                    AND "category_name" IS NOT NULL
+                    AND btrim("category_name") <> ''
+            ),
+            inserted_categories AS (
+                INSERT INTO "post_category" ("category_name")
+                SELECT "category_name"
+                FROM article_categories
+                ON CONFLICT ("category_name") DO NOTHING
+                RETURNING "category_id", "category_name"
+            ),
+            available_categories AS (
+                SELECT "category_id", "category_name"
+                FROM inserted_categories
+
+                UNION
+
+                SELECT pc."category_id", pc."category_name"
+                FROM "post_category" pc
+                JOIN article_categories ac ON ac."category_name" = pc."category_name"
+            )
+            UPDATE "posts" p
+            SET "category" = ac."category_id",
+                "category_name" = ac."category_name"
+            FROM available_categories ac
+            WHERE p."post_path" IS NOT NULL
+                AND p."category_name" IS NOT NULL
+                AND btrim(p."category_name") = ac."category_name"
+                AND (
+                    p."category" IS DISTINCT FROM ac."category_id"
+                    OR p."category_name" IS DISTINCT FROM ac."category_name"
+                );
+        )SQL", true);
+    }
+
+}
+
 namespace page {
 
     pqxx::result get_page_content(int post_id, std::shared_ptr<cp::ConnectionsManager> pool_ptr) {
@@ -31,7 +79,7 @@ namespace page {
         auto con = std::move(pool_ptr->getConnection());
         std::vector<std::string> params = {post_path, category, title, std::to_string(is_secret)};
         pqxx::result result = con->execute_params("INSERT INTO \"posts\" (\"post_path\", \"category_name\", \"title\", \"is_secret\") VALUES ($1, $2, $3, $4) RETURNING \"post_id\";", params, true);
-        con->execute("select normalize_post_categories();", true);
+        normalize_article_categories(con);
         pool_ptr->returnConnection(std::move(con));
         return result[0]["post_id"].as<int>();
     }
@@ -84,7 +132,7 @@ namespace page {
         std::vector<std::string> params = {std::to_string(is_secret), std::to_string(likes), std::to_string(dislikes), std::to_string(saved_count), title, author, text, category, post_path, std::to_string(post_id)};
 
         con->execute_params("UPDATE \"posts\" SET \"is_secret\"=($1), \"likes\"=($2), \"dislikes\"=($3), \"saved_count\"=($4), \"title\"=($5), \"author\"=($6), \"text\"=($7), \"category_name\"=($8), \"post_path\"=($9) WHERE \"post_id\"=($10);", params, true);
-        con->execute("select normalize_post_categories();", true);
+        normalize_article_categories(con);
         pool_ptr->returnConnection(std::move(con));
     }
 
